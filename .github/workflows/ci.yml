@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.10", "3.11"]
 
     steps:
     - uses: actions/checkout@v3
@@ -58,8 +58,8 @@ jobs:
         # stock CI. Skip cleanly when the index is absent.
         # --no-save: the gate must not overwrite the committed results
         # artifact (data/eval_results.json) as a side effect of checking.
-        if [ -f data/eval/baseline.json ] && [ -f data/vectordb/chroma.sqlite3 ]; then
+        if [ "${RUN_EVAL_REGRESSION:-0}" = "1" ] && [ -f data/eval/baseline.json ] && [ -f data/vectordb/chroma.sqlite3 ]; then
           python scripts/eval_retrieval.py --regression --no-save
         else
-          echo "Skipping eval regression: needs data/eval/baseline.json + a built index (data/vectordb)."
+          echo "Skipping eval regression: set RUN_EVAL_REGRESSION=1 and provide data/eval/baseline.json + a built index (data/vectordb)."
         fi

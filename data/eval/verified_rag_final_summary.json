@@ -1,0 +1,109 @@
+{
+  "evaluated_at": "2026-08-15T18:51:34Z",
+  "config": {
+    "run_name": "reranker-gated-final",
+    "dataset": "data/eval/3gpp_verified_rag_eval.jsonl",
+    "dataset_size": 60,
+    "answerable_cases": 39,
+    "refusal_cases": 21,
+    "corpus_scope": "Indexed TS 38.300 and TS 38.401 corpus",
+    "llm_provider": "openai",
+    "generation_model": "gpt-4o-mini",
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-3-small",
+    "vector_store_provider": "pinecone",
+    "vector_namespace": "3gpp-specs",
+    "indexed_vectors": 1561,
+    "reranker_enabled": true,
+    "reranker_model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+    "evidence_score_source": "reranker",
+    "evidence_gate_enabled": true,
+    "answer_verification_enabled": true,
+    "verifier_model": "gpt-4o-mini",
+    "source_artifact": "eval_results/run_20260815_185924_summary.json"
+  },
+  "summary": {
+    "dataset": {
+      "total": 60,
+      "answerable": 39,
+      "expected_refusals": 21,
+      "errors": 0
+    },
+    "retrieval": {
+      "labeled_examples": 39,
+      "hit_at_1": 0.9487,
+      "hit_at_3": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 0.9701
+    },
+    "vector_retrieval": {
+      "labeled_examples": 39,
+      "hit_at_1": 0.8974,
+      "hit_at_3": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 0.9402
+    },
+    "reranked_retrieval": {
+      "labeled_examples": 39,
+      "hit_at_1": 0.9487,
+      "hit_at_3": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 0.9701
+    },
+    "reranker": {
+      "examples_with_scores": 60,
+      "top_score_mean": 0.7836,
+      "top_score_median": 0.9759,
+      "gold_hit_at_1_after_reranking": 0.9487,
+      "gold_hit_at_3_after_reranking": 1.0,
+      "gold_mrr_after_reranking": 0.9701
+    },
+    "behavior": {
+      "answer_rate": 0.5,
+      "refusal_rate": 0.5,
+      "correct_answer_attempt_rate": 0.7692,
+      "correct_refusal_rate": 1.0,
+      "false_refusal_rate": 0.2308,
+      "unsafe_answer_rate": 0.0
+    },
+    "evidence": {
+      "pass_rate": 0.6333,
+      "rejection_rate": 0.3667,
+      "reason_distribution": {
+        "sufficient_evidence": 38,
+        "not_enough_qualifying_documents": 5,
+        "top_score_below_threshold": 17
+      }
+    },
+    "verification": {
+      "pass_rate": 0.7895,
+      "rejection_rate": 0.2105,
+      "reason_distribution": {
+        "verified": 30,
+        "unsupported_claim": 6,
+        "missing_citations": 1,
+        "contradiction": 1
+      }
+    },
+    "citations": {
+      "citation_validity_rate": 1.0,
+      "answer_citation_coverage": 1.0,
+      "source_precision": 0.975
+    },
+    "groundedness": {
+      "verified_grounded_answer_rate": 1.0,
+      "unsupported_answer_escape_rate": 0.0,
+      "unsupported_answer_escape_count": 0
+    },
+    "latency": {
+      "retrieve_mean": 4.23,
+      "retrieve_median": 4.3835,
+      "generate_mean": 1.8175,
+      "verify_mean": 1.7933,
+      "verify_median": 1.7265,
+      "total_mean": 7.8408,
+      "total_median": 8.546
+    }
+  },
+  "cases": null
+}

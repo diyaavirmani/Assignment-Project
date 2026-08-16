@@ -48,12 +48,15 @@ WORKDIR /app
 COPY --from=builder /venv /venv
 
 # Copy application source
+RUN mkdir -p data/eval
 COPY src/ ./src/
 COPY scripts/ ./scripts/
+COPY data/eval/verified_rag_final_summary.json ./verified_rag_final_summary.json
+COPY data/eval/verified_rag_final_summary.json ./data/eval/verified_rag_final_summary.json
 COPY pyproject.toml ./
 
 # Create data directories (will be mounted as volumes in production)
-RUN mkdir -p data/raw data/processed data/vectordb && \
+RUN mkdir -p data/raw data/processed data/vectordb data/eval && \
     chown -R appuser:appuser /app
 
 USER appuser
