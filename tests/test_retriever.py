@@ -3,6 +3,7 @@ Tests for src/core/retriever.py (DocumentRetriever)
 
 VectorStore and LocalEmbeddingGenerator are mocked via conftest fixtures.
 """
+
 import pytest
 
 
@@ -10,9 +11,11 @@ import pytest
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def retriever(mock_vector_store, mock_embedding_generator):
     from src.core.retriever import DocumentRetriever
+
     return DocumentRetriever(
         vector_store=mock_vector_store,
         embedding_generator=mock_embedding_generator,
@@ -24,9 +27,11 @@ def retriever(mock_vector_store, mock_embedding_generator):
 # Initialisation
 # ---------------------------------------------------------------------------
 
+
 class TestRetrieverInit:
     def test_default_top_k(self, mock_vector_store, mock_embedding_generator):
         from src.core.retriever import DocumentRetriever
+
         ret = DocumentRetriever(
             vector_store=mock_vector_store,
             embedding_generator=mock_embedding_generator,
@@ -35,6 +40,7 @@ class TestRetrieverInit:
 
     def test_custom_top_k(self, mock_vector_store, mock_embedding_generator):
         from src.core.retriever import DocumentRetriever
+
         ret = DocumentRetriever(
             vector_store=mock_vector_store,
             embedding_generator=mock_embedding_generator,
@@ -46,6 +52,7 @@ class TestRetrieverInit:
 # ---------------------------------------------------------------------------
 # retrieve
 # ---------------------------------------------------------------------------
+
 
 class TestRetrieve:
     def test_returns_list(self, retriever):
@@ -92,6 +99,7 @@ class TestRetrieve:
         """With expansion enabled, the embedded text carries the 3GPP gloss
         while the user's original wording is preserved as its prefix."""
         from src.core import retriever as retriever_module
+
         monkeypatch.setattr(retriever_module.settings, "query_expansion", True)
         retriever.retrieve("What is SDAP?")
         embedded = mock_embedding_generator.generate_embedding.call_args[0][0]
@@ -102,6 +110,7 @@ class TestRetrieve:
         self, retriever, mock_embedding_generator, monkeypatch
     ):
         from src.core import retriever as retriever_module
+
         monkeypatch.setattr(retriever_module.settings, "query_expansion", False)
         monkeypatch.setattr(retriever_module.settings, "query_decomposition", False)
         retriever.retrieve("What is SDAP?")
@@ -113,6 +122,7 @@ class TestRetrieve:
         """A comparison query embeds the raw query plus one sub-query per
         side (expansion disabled here to isolate decomposition)."""
         from src.core import retriever as retriever_module
+
         monkeypatch.setattr(retriever_module.settings, "query_expansion", False)
         monkeypatch.setattr(retriever_module.settings, "query_decomposition", True)
         retriever.retrieve("What are the differences between NR and LTE physical layer?")
@@ -125,6 +135,7 @@ class TestRetrieve:
         self, retriever, mock_embedding_generator, monkeypatch
     ):
         from src.core import retriever as retriever_module
+
         monkeypatch.setattr(retriever_module.settings, "query_expansion", False)
         monkeypatch.setattr(retriever_module.settings, "query_decomposition", False)
         retriever.retrieve("What are the differences between NR and LTE physical layer?")
@@ -158,6 +169,7 @@ class TestRetrieve:
         self, mock_vector_store, mock_embedding_generator
     ):
         from src.core.retriever import DocumentRetriever
+
         mock_vector_store.query.return_value = {
             "documents": [[]],
             "metadatas": [[]],
@@ -170,10 +182,85 @@ class TestRetrieve:
         results = ret.retrieve("no results query")
         assert results == []
 
+    def test_reranker_receives_candidates_and_returns_final_top_k(
+        self, mock_vector_store, mock_embedding_generator, monkeypatch
+    ):
+        from src.core import retriever as retriever_module
+        from src.core.retriever import DocumentRetriever
+
+        docs = [f"chunk {i}" for i in range(10)]
+        metadatas = [{"source": f"38300-j10.docx", "chunk_index": i} for i in range(10)]
+        mock_vector_store.query.return_value = {
+            "documents": [docs],
+            "metadatas": [metadatas],
+            "distances": [[i / 100 for i in range(10)]],
+        }
+
+        class FakeReranker:
+            def __init__(self):
+                self.received = None
+                self.top_n = None
+
+            def rerank(self, query, candidates, top_n):
+                self.received = candidates
+                self.top_n = top_n
+                ranked = list(reversed(candidates))
+                for rank, doc in enumerate(ranked, start=1):
+                    doc["reranker_score"] = 1.0 - (rank / 100)
+                    doc["rank_after_reranking"] = rank
+                return ranked[:top_n]
+
+        fake_reranker = FakeReranker()
+        monkeypatch.setattr(retriever_module.settings, "query_expansion", False)
+        monkeypatch.setattr(retriever_module.settings, "query_decomposition", False)
+        monkeypatch.setattr(retriever_module.settings, "reranker_candidate_k", 10)
+
+        ret = DocumentRetriever(
+            vector_store=mock_vector_store,
+            embedding_generator=mock_embedding_generator,
+            reranker=fake_reranker,
+            reranker_enabled=True,
+            top_k=5,
+        )
+        results = ret.retrieve("query")
+
+        assert mock_vector_store.query.call_args.kwargs["n_results"] == 10
+        assert len(fake_reranker.received) == 10
+        assert fake_reranker.top_n == 5
+        assert len(results) == 5
+        assert results[0]["chunk_index"] == 9
+
+    def test_reranker_preserves_metadata_filters(
+        self, mock_vector_store, mock_embedding_generator, monkeypatch
+    ):
+        from src.core import retriever as retriever_module
+        from src.core.retriever import DocumentRetriever
+
+        class PassthroughReranker:
+            def rerank(self, query, candidates, top_n):
+                return candidates[:top_n]
+
+        monkeypatch.setattr(retriever_module.settings, "query_expansion", False)
+        monkeypatch.setattr(retriever_module.settings, "query_decomposition", False)
+
+        ret = DocumentRetriever(
+            vector_store=mock_vector_store,
+            embedding_generator=mock_embedding_generator,
+            reranker=PassthroughReranker(),
+            reranker_enabled=True,
+            top_k=5,
+        )
+        ret.retrieve("query", domain="RAN", generation="5G")
+
+        assert mock_vector_store.query.call_args.kwargs["where_filter"] == {
+            "$and": [{"domain": "RAN"}, {"generation": "5G"}]
+        }
+
 
 # ---------------------------------------------------------------------------
 # format_context
 # ---------------------------------------------------------------------------
+
 
 class TestFormatContext:
     def test_returns_string(self, retriever, retrieved_docs):

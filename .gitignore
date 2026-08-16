@@ -45,6 +45,7 @@ data/vectordb/
 data/vectordb_cloud/
 data/vectorstore/
 data/api_metrics.json
+eval_results/
 
 # Logs
 *.log

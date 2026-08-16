@@ -1,6 +1,7 @@
 """
 Shared pytest fixtures for the 3GPP RAG Assistant test suite
 """
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -8,6 +9,7 @@ from unittest.mock import MagicMock
 # ---------------------------------------------------------------------------
 # Embedding fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def embedding_dim():
@@ -29,6 +31,7 @@ def mock_embeddings(mock_embedding):
 # ---------------------------------------------------------------------------
 # Document chunk fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_chunk():
@@ -78,6 +81,7 @@ def sample_chunks_with_embeddings(sample_chunks, mock_embedding):
 # Retrieved document fixtures (retriever output format)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def retrieved_docs():
     return [
@@ -86,12 +90,16 @@ def retrieved_docs():
             "source": "38300-g30.docx",
             "chunk_index": 0,
             "similarity": 0.92,
+            "vector_similarity": 0.92,
+            "reranker_score": 0.92,
         },
         {
             "text": "The gNB-DU connects to the gNB-CU via the F1 interface.",
             "source": "38401-g30.docx",
             "chunk_index": 1,
             "similarity": 0.87,
+            "vector_similarity": 0.87,
+            "reranker_score": 0.87,
         },
     ]
 
@@ -99,6 +107,7 @@ def retrieved_docs():
 # ---------------------------------------------------------------------------
 # Mocked core components
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_embedding_generator(mock_embedding, mock_embeddings):

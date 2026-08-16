@@ -140,9 +140,7 @@ class TestRetrieverProviderIntegration:
 
         create_embedding = MagicMock(return_value=mock_embedding)
         create_store = MagicMock(return_value=mock_store)
-        monkeypatch.setattr(
-            retriever_module, "create_embedding_generator", create_embedding
-        )
+        monkeypatch.setattr(retriever_module, "create_embedding_generator", create_embedding)
         monkeypatch.setattr(retriever_module, "create_vector_store", create_store)
         monkeypatch.setattr(retriever_module.settings, "query_expansion", False)
         monkeypatch.setattr(retriever_module.settings, "query_decomposition", False)
@@ -177,7 +175,17 @@ class TestRAGChainProviderIntegration:
                 "source": "38300-g30.docx",
                 "chunk_index": 0,
                 "similarity": 0.9,
-            }
+                "vector_similarity": 0.9,
+                "reranker_score": 0.9,
+            },
+            {
+                "text": "more context",
+                "source": "38300-g30.docx",
+                "chunk_index": 1,
+                "similarity": 0.88,
+                "vector_similarity": 0.88,
+                "reranker_score": 0.88,
+            },
         ]
         mock_retriever.format_context.return_value = "context"
         mock_llm = MagicMock()
@@ -185,6 +193,22 @@ class TestRAGChainProviderIntegration:
         mock_llm.generate.return_value = "answer"
         create_llm = MagicMock(return_value=mock_llm)
         monkeypatch.setattr(rag_module, "create_llm", create_llm)
+        mock_verifier = MagicMock()
+        mock_verifier.enabled = True
+        mock_verifier.verify.return_value.to_dict.return_value = {
+            "passed": True,
+            "reason": "verified",
+            "total_claims": 1,
+            "supported_claims": 1,
+            "unsupported_claims": [],
+            "contradicted_claims": [],
+            "citation_valid": True,
+            "cited_sources": ["S1"],
+            "invalid_citations": [],
+            "detail": "",
+        }
+        mock_verifier.verify.return_value.passed = True
+        monkeypatch.setattr(rag_module, "AnswerVerifier", MagicMock(return_value=mock_verifier))
 
         chain = rag_module.RAGChain(retriever=mock_retriever)
         result = chain.query("question")

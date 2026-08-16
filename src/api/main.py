@@ -352,6 +352,10 @@ async def query(request: QueryRequest, req: Request):
         query_time=result["query_time"],
         retrieve_time=result["retrieve_time"],
         generate_time=result["generate_time"],
+        verify_time=result.get("verify_time"),
+        answer_status=result.get("answer_status"),
+        evidence=result.get("evidence"),
+        verification=result.get("verification"),
     )
 
 

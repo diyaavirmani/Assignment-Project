@@ -13,6 +13,7 @@ Override any default by exporting the variable before starting the server:
 
 See ``.env.example`` in the project root for a full reference.
 """
+
 from urllib.parse import urlparse
 
 from pydantic_settings import BaseSettings
@@ -68,6 +69,7 @@ class Settings(BaseSettings):
                 f"got '{parsed.hostname}'"
             )
         return v
+
     llm_model: str = "llama3.2"
     max_tokens: int = 1000
     temperature: float = 0.1
@@ -108,6 +110,75 @@ class Settings(BaseSettings):
     # Application Settings
     max_history_length: int = 5
     top_k_results: int = 5
+
+    # Evidence gate settings. The reranker defaults below were calibrated for
+    # the indexed TS 38.300 + TS 38.401 corpus using text-embedding-3-small and
+    # cross-encoder/ms-marco-MiniLM-L6-v2. They are not universal thresholds.
+    evidence_gate_enabled: bool = True
+    evidence_min_top_score: float = 0.80
+    evidence_min_doc_score: float = 0.80
+    evidence_min_docs: int = 2
+    evidence_mean_top_n: int = 3
+    evidence_min_mean_score: float = 0.0
+    evidence_score_source: str = "reranker"
+
+    # Post-generation answer verification. When enabled, generated answers are
+    # withheld unless citations and grounding both pass.
+    answer_verification_enabled: bool = True
+    openai_verifier_model: str = ""
+
+    # Cross-encoder reranking. Reranker scores are recorded for analysis, but
+    # EvidenceGate continues to consume vector cosine similarity.
+    reranker_enabled: bool = True
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L6-v2"
+    reranker_candidate_k: int = 10
+    reranker_top_k: int = 5
+
+    @field_validator(
+        "evidence_min_top_score",
+        "evidence_min_doc_score",
+        "evidence_min_mean_score",
+    )
+    @classmethod
+    def validate_evidence_score(cls, v: float) -> float:
+        """Evidence score thresholds are expected to be cosine similarities."""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("evidence score thresholds must be between 0.0 and 1.0")
+        return v
+
+    @field_validator("evidence_min_docs")
+    @classmethod
+    def validate_evidence_min_docs(cls, v: int) -> int:
+        """Minimum qualifying document count cannot be negative."""
+        if v < 0:
+            raise ValueError("evidence_min_docs must be greater than or equal to zero")
+        return v
+
+    @field_validator("evidence_mean_top_n")
+    @classmethod
+    def validate_evidence_mean_top_n(cls, v: int) -> int:
+        """Mean score window must include at least one document."""
+        if v <= 0:
+            raise ValueError("evidence_mean_top_n must be greater than zero")
+        return v
+
+    @field_validator("evidence_score_source")
+    @classmethod
+    def validate_evidence_score_source(cls, v: str) -> str:
+        """Evidence scores can come from vector similarity or reranker score."""
+        normalized = v.strip().lower()
+        if normalized not in {"vector", "reranker"}:
+            raise ValueError("evidence_score_source must be 'vector' or 'reranker'")
+        return normalized
+
+    @field_validator("reranker_candidate_k", "reranker_top_k")
+    @classmethod
+    def validate_reranker_k(cls, v: int) -> int:
+        """Reranker retrieval limits must include at least one document."""
+        if v <= 0:
+            raise ValueError("reranker k values must be greater than zero")
+        return v
+
     # Query-time 3GPP vocabulary expansion (src/core/query_expansion.py):
     # appends full forms of known abbreviations before embedding the query.
     query_expansion: bool = True
