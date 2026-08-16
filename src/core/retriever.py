@@ -16,13 +16,12 @@ Example:
     context = retriever.format_context(docs)
 """
 
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 import logging
 
 from src.config import settings
-from src.core.embeddings import LocalEmbeddingGenerator
+from src.core.providers import create_embedding_generator, create_vector_store
 from src.core.retrieval_fusion import fused_retrieve
-from src.core.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -38,25 +37,28 @@ class DocumentRetriever:
 
     def __init__(
         self,
-        vector_store: Optional[VectorStore] = None,
-        embedding_generator: Optional[LocalEmbeddingGenerator] = None,
+        vector_store: Optional[Any] = None,
+        embedding_generator: Optional[Any] = None,
         top_k: int = 5,
     ) -> None:
         """
         Args:
-            vector_store: VectorStore instance. A new default instance is
-                created if not provided (connects to ./data/vectordb).
-            embedding_generator: LocalEmbeddingGenerator instance. Defaults
-                to bge-small which must match the model used at index time.
+            vector_store: Vector store instance. A provider-configured
+                instance is created if not provided.
+            embedding_generator: Embedding generator instance. A
+                provider-configured instance is created if not provided.
             top_k: Default number of chunks to return. Can be overridden
                 per-query via the top_k parameter of retrieve().
         """
-        self.vector_store = vector_store or VectorStore()
-        self.embedding_generator = embedding_generator or LocalEmbeddingGenerator(
-            model_name="bge-small"
-        )
+        self.vector_store = vector_store or create_vector_store()
+        self.embedding_generator = embedding_generator or create_embedding_generator()
         self.top_k = top_k
-        logger.info(f"Initialized DocumentRetriever (top_k={top_k})")
+        logger.info(
+            "Initialized DocumentRetriever (top_k=%s, embeddings=%s, vector_store=%s)",
+            top_k,
+            settings.embedding_provider,
+            settings.vector_store_provider,
+        )
 
     @staticmethod
     def _build_where_filter(
@@ -215,6 +217,7 @@ class DocumentRetriever:
 if __name__ == "__main__":
     # Test the retriever
     import sys
+    from src.core.providers import create_vector_store
 
     logging.basicConfig(level=logging.INFO)
 
@@ -223,7 +226,7 @@ if __name__ == "__main__":
     print("=" * 60 + "\n")
 
     # Check if vector store has data
-    store = VectorStore()
+    store = create_vector_store()
     stats = store.get_stats()
 
     if stats["total_chunks"] == 0:

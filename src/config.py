@@ -50,7 +50,7 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
-    # LLM Provider: "ollama" (local, zero cost) or "groq" (cloud, free tier)
+    # LLM Provider: "ollama" (local), "groq" (cloud), or "openai" (cloud)
     llm_provider: str = "ollama"
 
     # Ollama Configuration (local LLM - no API key needed)
@@ -76,12 +76,24 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
 
-    # Embedding Configuration (local sentence-transformers - no API key needed)
+    # OpenAI Configuration (cloud LLM and embeddings)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
+
+    # Embedding Configuration: "local" or "openai"
+    embedding_provider: str = "local"
     embedding_model: str = "bge-small"  # options: mini, mpnet, bge-small, bge-base
 
-    # Vector Database Configuration
+    # Vector Database Configuration: "chroma" or "pinecone"
+    vector_store_provider: str = "chroma"
     vector_db_path: str = "./data/vectordb"
     collection_name: str = "3gpp_specs"
+
+    # Pinecone Vector Database Configuration (cloud vector store)
+    pinecone_api_key: str = ""
+    pinecone_index_name: str = ""
+    pinecone_namespace: str = "3gpp-specs"
 
     # Document Processing
     chunk_size: int = 1000

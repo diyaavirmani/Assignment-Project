@@ -25,7 +25,7 @@ import logging
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -39,9 +39,10 @@ from src.api.models import (
     CatalogResponse, CatalogSpec,
 )
 from src.core.rag_chain import RAGChain
-from src.core.vector_store import VectorStore
+from src.core.providers import create_vector_store
 from src.core.llm import OllamaLLM
 from src.core.groq_llm import GroqLLM
+from src.core.openai_llm import OpenAILLM
 from src.core.retriever import DocumentRetriever
 from src.core.spec_catalog import CATALOG, infer_spec_from_filename
 from src.utils.logger import setup_logger
@@ -117,7 +118,7 @@ class AppState:
 
     def __init__(self):
         self.rag_chain: Optional[RAGChain] = None
-        self.vector_store: Optional[VectorStore] = None
+        self.vector_store: Optional[Any] = None
         self.metrics: Optional[MetricsTracker] = None
         # Session store: session_id -> (RAGChain, last_access_time)
         # LRU-bounded with TTL eviction
@@ -152,10 +153,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting 3GPP RAG Assistant API...")
 
     try:
-        app_state.vector_store = VectorStore(
-            persist_directory=settings.vector_db_path,
-            collection_name=settings.collection_name,
-        )
+        app_state.vector_store = create_vector_store()
         stats = app_state.vector_store.get_stats()
         logger.info(f"Vector store ready: {stats['total_chunks']} chunks")
 
@@ -228,7 +226,8 @@ async def add_security_and_timing_headers(request: Request, call_next):
 
 def _create_llm():
     """Create the right LLM instance based on settings.llm_provider."""
-    if settings.llm_provider == "groq":
+    provider = settings.llm_provider.lower()
+    if provider == "groq":
         logger.info(f"Using Groq LLM: {settings.groq_model}")
         return GroqLLM(
             model=settings.groq_model,
@@ -236,7 +235,15 @@ def _create_llm():
             temperature=settings.temperature,
             max_tokens=settings.max_tokens,
         )
-    else:
+    if provider == "openai":
+        logger.info(f"Using OpenAI LLM: {settings.openai_model}")
+        return OpenAILLM(
+            model=settings.openai_model,
+            api_key=settings.openai_api_key or None,
+            temperature=settings.temperature,
+            max_tokens=settings.max_tokens,
+        )
+    if provider == "ollama":
         logger.info(f"Using Ollama LLM: {settings.llm_model}")
         return OllamaLLM(
             model=settings.llm_model,
@@ -244,6 +251,16 @@ def _create_llm():
             temperature=settings.temperature,
             max_tokens=settings.max_tokens,
         )
+    raise ValueError("Invalid LLM_PROVIDER. Expected one of: ollama, groq, openai")
+
+
+def _llm_model_name() -> str:
+    provider = settings.llm_provider.lower()
+    if provider == "groq":
+        return settings.groq_model
+    if provider == "openai":
+        return settings.openai_model
+    return settings.llm_model
 
 
 def _get_or_create_session(session_id: Optional[str]) -> tuple[str, RAGChain]:
@@ -445,14 +462,13 @@ async def health():
         logger.error(f"Vector store health check failed: {e}")
         components["vector_store"] = {"status": "unavailable", "detail": "connection failed"}
 
-    # LLM (Ollama or Groq)
+    # LLM
     try:
         llm = _create_llm()
         if llm.is_available():
-            model_name = settings.groq_model if settings.llm_provider == "groq" else settings.llm_model
             components["llm"] = {
                 "status": "ok",
-                "detail": f"provider={settings.llm_provider}, model={model_name}"
+                "detail": f"provider={settings.llm_provider}, model={_llm_model_name()}"
             }
         else:
             components["llm"] = {
@@ -466,7 +482,10 @@ async def health():
     # Embeddings
     components["embeddings"] = {
         "status": "ok",
-        "detail": f"model={settings.embedding_model} (local)"
+        "detail": (
+            f"provider={settings.embedding_provider}, "
+            f"model={settings.openai_embedding_model if settings.embedding_provider == 'openai' else settings.embedding_model}"
+        )
     }
 
     overall = (
@@ -574,14 +593,16 @@ async def catalog(
         try:
             # Probe each catalog spec with a targeted where-filter query
             # (avoids fetching all 40K+ chunks just to discover which specs exist)
-            for entry in CATALOG:
-                result = app_state.vector_store.collection.get(
-                    limit=1,
-                    where={"spec_number": entry["spec_number"]},
-                    include=[],
-                )
-                if result and result.get("ids"):
-                    indexed_specs.add(entry["spec_number"])
+            collection = getattr(app_state.vector_store, "collection", None)
+            if collection is not None:
+                for entry in CATALOG:
+                    result = collection.get(
+                        limit=1,
+                        where={"spec_number": entry["spec_number"]},
+                        include=[],
+                    )
+                    if result and result.get("ids"):
+                        indexed_specs.add(entry["spec_number"])
         except Exception:
             pass  # Best-effort; if it fails just mark all as not indexed
 

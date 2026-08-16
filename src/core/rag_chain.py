@@ -14,10 +14,11 @@ Usage:
 """
 import logging
 import time
-from typing import List, Dict, Optional, Iterator
+from typing import Any, List, Dict, Optional, Iterator
 
+from src.config import settings
+from src.core.providers import create_llm
 from src.core.retriever import DocumentRetriever
-from src.core.llm import OllamaLLM
 
 logger = logging.getLogger(__name__)
 
@@ -48,25 +49,26 @@ class RAGChain:
     def __init__(
         self,
         retriever: Optional[DocumentRetriever] = None,
-        llm: Optional[OllamaLLM] = None,
+        llm: Optional[Any] = None,
         top_k: int = 5,
         max_history_turns: int = 5,
     ):
         """
         Args:
             retriever: DocumentRetriever instance (created with defaults if None)
-            llm: OllamaLLM instance (created with defaults if None)
+            llm: LLM instance (created from provider config if None)
             top_k: Number of chunks to retrieve per query
             max_history_turns: How many prior Q&A pairs to keep in context
         """
         self.retriever = retriever or DocumentRetriever(top_k=top_k)
-        self.llm = llm or OllamaLLM()
+        self.llm = llm or create_llm()
         self.max_history_turns = max_history_turns
         self._history: List[Dict[str, str]] = []
 
         logger.info(
             f"Initialized RAGChain (top_k={top_k}, "
             f"model={self.llm.model}, "
+            f"llm_provider={settings.llm_provider}, "
             f"history={max_history_turns})"
         )
 
