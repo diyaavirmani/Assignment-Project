@@ -181,6 +181,18 @@ class TestRAGChainQuery:
         assert result["verification"]["passed"] is True
         assert result["answer_status"] == "answered"
 
+    def test_generation_prompt_requires_narrow_cited_answers(self):
+        chain, _, mock_llm, _ = _make_chain(
+            llm_answer="The F1 interface connects gNB-CU and gNB-DU [S2]."
+        )
+
+        chain.query("What is the F1 interface used for?")
+
+        prompt = mock_llm.generate.call_args.args[0]
+        assert "Answer the user's exact question with the narrowest sufficient cited answer." in prompt
+        assert "Do not add protocol split" in prompt
+        assert "unless the supplied evidence explicitly supports them" in prompt
+
     def test_strong_retrieval_verification_failure_hides_generated_answer(self):
         chain, _, mock_llm, mock_verifier = _make_chain(
             llm_answer="The gNB-CU performs unsupported billing [S1]."

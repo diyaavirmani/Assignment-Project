@@ -16,6 +16,7 @@ Run:
 Interactive docs:
     http://localhost:8000/docs
 """
+
 import json
 import os
 import re
@@ -33,16 +34,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from src.api.models import (
-    QueryRequest, QueryResponse, SourceDocument,
-    HistoryResponse, HistoryMessage,
-    HealthResponse, StatsResponse, EvalResponse, ErrorResponse,
-    CatalogResponse, CatalogSpec,
+    QueryRequest,
+    QueryResponse,
+    SourceDocument,
+    HistoryResponse,
+    HistoryMessage,
+    HealthResponse,
+    StatsResponse,
+    EvalResponse,
+    ErrorResponse,
+    CatalogResponse,
+    CatalogSpec,
 )
 from src.core.rag_chain import RAGChain
-from src.core.providers import create_vector_store
-from src.core.llm import OllamaLLM
-from src.core.groq_llm import GroqLLM
-from src.core.openai_llm import OpenAILLM
+from src.core.providers import create_llm, create_vector_store
 from src.core.retriever import DocumentRetriever
 from src.core.spec_catalog import CATALOG, infer_spec_from_filename
 from src.utils.logger import setup_logger
@@ -60,15 +65,30 @@ logger = logging.getLogger(__name__)
 # Security constants
 # ---------------------------------------------------------------------------
 
-MAX_SESSIONS = 200           # Limit total active sessions (memory DoS protection)
-SESSION_TTL_SECONDS = 3600   # Sessions expire after 1 hour of inactivity
-MAX_QUESTION_LENGTH = 1000   # Limit user input length
+MAX_SESSIONS = 200  # Limit total active sessions (memory DoS protection)
+SESSION_TTL_SECONDS = 3600  # Sessions expire after 1 hour of inactivity
+MAX_QUESTION_LENGTH = 1000  # Limit user input length
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FINAL_EVAL_SUMMARY_FILENAME = "verified_rag_final_summary.json"
 
 # Rate limiting: per-IP request tracking
-_rate_limit_window = 60       # seconds
-_rate_limit_max = 20          # max queries per IP per window
+_rate_limit_window = 60  # seconds
+_rate_limit_max = 20  # max queries per IP per window
 _rate_limit_max_ips = 10_000  # max tracked IPs (prevents memory exhaustion)
 _rate_limit_store: OrderedDict[str, list] = OrderedDict()
+
+
+def _resolve_final_eval_summary_path() -> Path:
+    """Resolve the safe final evaluation summary without relying on cwd."""
+    configured = os.getenv("FINAL_EVAL_SUMMARY_PATH")
+    if configured:
+        return Path(configured).expanduser().resolve()
+
+    packaged = PROJECT_ROOT / FINAL_EVAL_SUMMARY_FILENAME
+    if packaged.exists():
+        return packaged
+
+    return PROJECT_ROOT / "data" / "eval" / FINAL_EVAL_SUMMARY_FILENAME
 
 
 def _get_client_ip(request: Request) -> str:
@@ -99,8 +119,7 @@ def _check_rate_limit(request: Request):
 
     # Prune expired timestamps for this IP
     _rate_limit_store[client_ip] = [
-        t for t in _rate_limit_store[client_ip]
-        if now - t < _rate_limit_window
+        t for t in _rate_limit_store[client_ip] if now - t < _rate_limit_window
     ]
     # Move to end (LRU)
     _rate_limit_store.move_to_end(client_ip)
@@ -108,7 +127,7 @@ def _check_rate_limit(request: Request):
     if len(_rate_limit_store[client_ip]) >= _rate_limit_max:
         raise HTTPException(
             status_code=429,
-            detail=f"Rate limit exceeded. Max {_rate_limit_max} queries per minute."
+            detail=f"Rate limit exceeded. Max {_rate_limit_max} queries per minute.",
         )
     _rate_limit_store[client_ip].append(now)
 
@@ -119,6 +138,7 @@ class AppState:
     def __init__(self):
         self.rag_chain: Optional[RAGChain] = None
         self.vector_store: Optional[Any] = None
+        self.retriever: Optional[DocumentRetriever] = None
         self.metrics: Optional[MetricsTracker] = None
         # Session store: session_id -> (RAGChain, last_access_time)
         # LRU-bounded with TTL eviction
@@ -129,7 +149,8 @@ class AppState:
         """Remove sessions older than TTL and enforce max count."""
         now = time.time()
         expired = [
-            sid for sid, (_, last_access) in self.sessions.items()
+            sid
+            for sid, (_, last_access) in self.sessions.items()
             if now - last_access > SESSION_TTL_SECONDS
         ]
         for sid in expired:
@@ -146,6 +167,7 @@ app_state = AppState()
 # Lifespan (startup / shutdown)
 # ---------------------------------------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialise heavy components once at startup."""
@@ -157,11 +179,18 @@ async def lifespan(app: FastAPI):
         stats = app_state.vector_store.get_stats()
         logger.info(f"Vector store ready: {stats['total_chunks']} chunks")
 
+        app_state.retriever = DocumentRetriever(
+            vector_store=app_state.vector_store,
+            top_k=settings.top_k_results,
+        )
+        logger.info("Shared retriever ready.")
+
         app_state.metrics = MetricsTracker(persist_path="data/api_metrics.json")
         app_state.ready = True
         logger.info("API ready.")
     except Exception as e:
         logger.error(f"Startup error: {e}")
+        app_state.retriever = None
         app_state.ready = False
 
     yield
@@ -176,11 +205,33 @@ async def lifespan(app: FastAPI):
 # Disable interactive docs in production (expose internal schema)
 _enable_docs = os.getenv("ENABLE_API_DOCS", "false").lower() in ("1", "true", "yes")
 
+_LOCAL_ALLOWED_ORIGINS = [
+    "http://localhost:8501",
+    "http://127.0.0.1:8501",
+]
+
+
+def _allowed_origins_from_env() -> list[str]:
+    """Return local Streamlit origins plus comma-separated production origins."""
+    configured = os.getenv("ALLOWED_ORIGINS", "")
+    origins = [origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()]
+
+    allowed_origins = []
+    for origin in [*_LOCAL_ALLOWED_ORIGINS, *origins]:
+        if origin == "*":
+            logger.warning("Ignoring wildcard ALLOWED_ORIGINS entry; configure exact origins.")
+            continue
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
+    return allowed_origins
+
+
 app = FastAPI(
     title="3GPP RAG Assistant",
     description=(
-        "AI-powered question answering over 3GPP technical specifications. "
-        "Runs locally with Ollama or in the cloud with Groq."
+        "Verified RAG question answering over 3GPP technical specifications. "
+        "Production defaults use OpenAI, Pinecone, cross-encoder reranking, "
+        "reranker-based evidence gating, and answer verification."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -191,10 +242,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8501",    # Local Streamlit dev
-    ],
-    allow_origin_regex=r"https://3gpp-rag-assistant\.streamlit\.app",  # Only our Streamlit Cloud app
+    allow_origins=_allowed_origins_from_env(),
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
 )
@@ -203,6 +251,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Middleware: request timing
 # ---------------------------------------------------------------------------
+
 
 @app.middleware("http")
 async def add_security_and_timing_headers(request: Request, call_next):
@@ -224,34 +273,11 @@ async def add_security_and_timing_headers(request: Request, call_next):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _create_llm():
     """Create the right LLM instance based on settings.llm_provider."""
-    provider = settings.llm_provider.lower()
-    if provider == "groq":
-        logger.info(f"Using Groq LLM: {settings.groq_model}")
-        return GroqLLM(
-            model=settings.groq_model,
-            api_key=settings.groq_api_key or None,
-            temperature=settings.temperature,
-            max_tokens=settings.max_tokens,
-        )
-    if provider == "openai":
-        logger.info(f"Using OpenAI LLM: {settings.openai_model}")
-        return OpenAILLM(
-            model=settings.openai_model,
-            api_key=settings.openai_api_key or None,
-            temperature=settings.temperature,
-            max_tokens=settings.max_tokens,
-        )
-    if provider == "ollama":
-        logger.info(f"Using Ollama LLM: {settings.llm_model}")
-        return OllamaLLM(
-            model=settings.llm_model,
-            base_url=settings.ollama_base_url,
-            temperature=settings.temperature,
-            max_tokens=settings.max_tokens,
-        )
-    raise ValueError("Invalid LLM_PROVIDER. Expected one of: ollama, groq, openai")
+    logger.info("Using %s LLM: %s", settings.llm_provider, _llm_model_name())
+    return create_llm()
 
 
 def _llm_model_name() -> str:
@@ -281,10 +307,7 @@ def _get_or_create_session(session_id: Optional[str]) -> tuple[str, RAGChain]:
 
     new_id = session_id or str(uuid.uuid4())
     chain = RAGChain(
-        retriever=DocumentRetriever(
-            vector_store=app_state.vector_store,
-            top_k=settings.top_k_results,
-        ),
+        retriever=app_state.retriever,
         llm=_create_llm(),
         max_history_turns=settings.max_history_length,
     )
@@ -294,16 +317,71 @@ def _get_or_create_session(session_id: Optional[str]) -> tuple[str, RAGChain]:
 
 
 def _check_ready():
-    if not app_state.ready:
+    if (
+        not app_state.ready
+        or app_state.vector_store is None
+        or app_state.retriever is None
+        or app_state.metrics is None
+    ):
         raise HTTPException(
-            status_code=503,
-            detail="Service not ready. Check vector store and configuration."
+            status_code=503, detail="Service not ready. Check vector store and configuration."
         )
+
+
+def _safe_provider_config() -> Dict[str, Any]:
+    """Return provider/runtime configuration without secrets."""
+    return {
+        "llm": {
+            "provider": settings.llm_provider,
+            "model": _llm_model_name(),
+        },
+        "embeddings": {
+            "provider": settings.embedding_provider,
+            "model": (
+                settings.openai_embedding_model
+                if settings.embedding_provider.lower() == "openai"
+                else settings.embedding_model
+            ),
+        },
+        "vector_store": {
+            "provider": settings.vector_store_provider,
+            "index_name": (
+                settings.pinecone_index_name
+                if settings.vector_store_provider.lower() == "pinecone"
+                else settings.collection_name
+            ),
+            "namespace": (
+                settings.pinecone_namespace
+                if settings.vector_store_provider.lower() == "pinecone"
+                else None
+            ),
+        },
+        "reranker": {
+            "enabled": settings.reranker_enabled,
+            "model": settings.reranker_model,
+            "candidate_k": settings.reranker_candidate_k,
+            "top_k": settings.reranker_top_k,
+        },
+        "evidence_gate": {
+            "enabled": settings.evidence_gate_enabled,
+            "score_source": settings.evidence_score_source,
+            "min_top_score": settings.evidence_min_top_score,
+            "min_doc_score": settings.evidence_min_doc_score,
+            "min_docs": settings.evidence_min_docs,
+            "mean_top_n": settings.evidence_mean_top_n,
+            "min_mean_score": settings.evidence_min_mean_score,
+        },
+        "verification": {
+            "enabled": settings.answer_verification_enabled,
+            "model": settings.openai_verifier_model or settings.openai_model,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.post(
     "/query",
@@ -334,7 +412,9 @@ async def query(request: QueryRequest, req: Request):
         )
     except RuntimeError as e:
         logger.error(f"Query failed: {e}")
-        raise HTTPException(status_code=503, detail="LLM generation failed. Check /health for status.")
+        raise HTTPException(
+            status_code=503, detail="LLM generation failed. Check /health for status."
+        )
 
     # Record metrics
     app_state.metrics.record(
@@ -456,11 +536,21 @@ async def health():
     try:
         stats = app_state.vector_store.get_stats()
         if stats["total_chunks"] == 0:
-            components["vector_store"] = {"status": "degraded", "detail": "Index is empty"}
+            components["vector_store"] = {
+                "status": "degraded",
+                "detail": f"provider={settings.vector_store_provider}, index is empty",
+            }
         else:
+            detail = f"provider={settings.vector_store_provider}, chunks={stats['total_chunks']}"
+            if settings.vector_store_provider.lower() == "pinecone":
+                detail += (
+                    f", index={stats.get('index_name', settings.pinecone_index_name)}, "
+                    f"namespace={stats.get('namespace', settings.pinecone_namespace)}, "
+                    f"total_vectors={stats.get('total_vector_count', stats['total_chunks'])}"
+                )
             components["vector_store"] = {
                 "status": "ok",
-                "detail": f"{stats['total_chunks']} chunks indexed"
+                "detail": detail,
             }
     except Exception as e:
         logger.error(f"Vector store health check failed: {e}")
@@ -472,12 +562,12 @@ async def health():
         if llm.is_available():
             components["llm"] = {
                 "status": "ok",
-                "detail": f"provider={settings.llm_provider}, model={_llm_model_name()}"
+                "detail": f"provider={settings.llm_provider}, model={_llm_model_name()}",
             }
         else:
             components["llm"] = {
                 "status": "degraded",
-                "detail": f"LLM not available ({settings.llm_provider})"
+                "detail": f"LLM not available ({settings.llm_provider})",
             }
     except Exception as e:
         logger.error(f"LLM health check failed: {e}")
@@ -488,14 +578,33 @@ async def health():
         "status": "ok",
         "detail": (
             f"provider={settings.embedding_provider}, "
-            f"model={settings.openai_embedding_model if settings.embedding_provider == 'openai' else settings.embedding_model}"
-        )
+            f"model={settings.openai_embedding_model if settings.embedding_provider.lower() == 'openai' else settings.embedding_model}"
+        ),
     }
 
-    overall = (
-        "ok" if all(c["status"] == "ok" for c in components.values())
-        else "degraded"
-    )
+    components["reranker"] = {
+        "status": "ok" if settings.reranker_enabled else "degraded",
+        "detail": (
+            f"enabled={settings.reranker_enabled}, model={settings.reranker_model}, "
+            f"candidate_k={settings.reranker_candidate_k}, top_k={settings.reranker_top_k}"
+        ),
+    }
+    components["evidence_gate"] = {
+        "status": "ok" if settings.evidence_gate_enabled else "degraded",
+        "detail": (
+            f"enabled={settings.evidence_gate_enabled}, "
+            f"score_source={settings.evidence_score_source}"
+        ),
+    }
+    components["verification"] = {
+        "status": "ok" if settings.answer_verification_enabled else "degraded",
+        "detail": (
+            f"enabled={settings.answer_verification_enabled}, "
+            f"model={settings.openai_verifier_model or settings.openai_model}"
+        ),
+    }
+
+    overall = "ok" if all(c["status"] == "ok" for c in components.values()) else "degraded"
 
     return HealthResponse(
         status=overall,
@@ -521,6 +630,7 @@ async def stats():
         vector_store=vs_stats,
         active_sessions=len(app_state.sessions),
         metrics=metrics_summary,
+        providers=_safe_provider_config(),
     )
 
 
@@ -540,21 +650,20 @@ async def metrics():
     response_model=EvalResponse,
     summary="Latest evaluation results",
     description=(
-        "Returns the most recent pipeline evaluation results (retrieval quality, "
-        "answer quality, and latency benchmarks). "
-        "Run `python scripts/eval_retrieval.py [--full]` to refresh."
+        "Returns the committed safe aggregate summary for the final verified "
+        "60-query guarded RAG evaluation when present."
     ),
     tags=["System"],
 )
 async def eval_results():
     """
-    Return the latest saved evaluation results from data/eval_results.json.
+    Return the safe committed final verified RAG evaluation summary.
 
     If no results exist yet, returns available=False with empty fields.
-    Regenerate by running: python scripts/eval_retrieval.py --full
     """
-    eval_path = Path("data/eval_results.json")
+    eval_path = _resolve_final_eval_summary_path()
     if not eval_path.exists():
+        logger.warning("Final eval summary not found at %s", eval_path)
         return EvalResponse(available=False)
 
     try:
@@ -583,7 +692,7 @@ async def eval_results():
     tags=["System"],
 )
 async def catalog(
-    domain: Optional[str] = None,     # "RAN" or "CORE"
+    domain: Optional[str] = None,  # "RAN" or "CORE"
     generation: Optional[str] = None,  # "5G" or "LTE"
 ):
     """Return the full spec catalog, optionally filtered by domain/generation.
@@ -591,24 +700,18 @@ async def catalog(
     The ``indexed`` field reflects whether a spec's chunks are present in the
     current vector store (based on spec_number metadata).
     """
-    # Determine which spec numbers are present in the vector store
     indexed_specs: set = set()
     if app_state.ready and app_state.vector_store:
         try:
-            # Probe each catalog spec with a targeted where-filter query
-            # (avoids fetching all 40K+ chunks just to discover which specs exist)
-            collection = getattr(app_state.vector_store, "collection", None)
-            if collection is not None:
-                for entry in CATALOG:
-                    result = collection.get(
-                        limit=1,
-                        where={"spec_number": entry["spec_number"]},
-                        include=[],
-                    )
-                    if result and result.get("ids"):
-                        indexed_specs.add(entry["spec_number"])
-        except Exception:
-            pass  # Best-effort; if it fails just mark all as not indexed
+            get_indexed_spec_numbers = getattr(
+                app_state.vector_store, "get_indexed_spec_numbers", None
+            )
+            if callable(get_indexed_spec_numbers):
+                indexed_specs = set(
+                    get_indexed_spec_numbers(entry["spec_number"] for entry in CATALOG)
+                )
+        except Exception as e:
+            logger.warning("Catalog indexed-spec detection failed: %s", e)
 
     entries = CATALOG
     if domain:
@@ -637,10 +740,13 @@ async def catalog(
 
 @app.get("/", include_in_schema=False)
 async def root():
-    return {
+    response = {
         "name": "3GPP RAG Assistant API",
         "version": "1.0.0",
-        "docs": "/docs",
         "health": "/health",
         "eval": "/eval",
+        "providers": _safe_provider_config(),
     }
+    if _enable_docs:
+        response["docs"] = "/docs"
+    return response

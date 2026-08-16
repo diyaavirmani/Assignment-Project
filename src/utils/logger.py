@@ -1,6 +1,7 @@
 """
 Structured logging configuration for the 3GPP RAG Assistant
 """
+
 import logging
 import sys
 from pathlib import Path

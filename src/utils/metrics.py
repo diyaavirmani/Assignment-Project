@@ -10,6 +10,7 @@ Usage:
                    num_sources=5, answer_length=420)
     print(tracker.summary())
 """
+
 import hashlib
 import json
 import time
@@ -25,12 +26,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class QueryMetric:
     """Metrics captured for a single query."""
+
     query: str
-    retrieve_time: float        # seconds
-    generate_time: float        # seconds
-    total_time: float           # seconds
-    num_sources: int            # chunks retrieved
-    answer_length: int          # characters in the answer
+    retrieve_time: float  # seconds
+    generate_time: float  # seconds
+    total_time: float  # seconds
+    num_sources: int  # chunks retrieved
+    answer_length: int  # characters in the answer
     timestamp: float = field(default_factory=time.time)
 
     @property
@@ -104,25 +106,21 @@ class MetricsTracker:
         return {
             "total_queries": len(self._records),
             "total_time": {
-                "mean":   round(mean(total_times), 3),
+                "mean": round(mean(total_times), 3),
                 "median": round(median(total_times), 3),
-                "min":    round(min(total_times), 3),
-                "max":    round(max(total_times), 3),
+                "min": round(min(total_times), 3),
+                "max": round(max(total_times), 3),
             },
             "retrieve_time": {
-                "mean":   round(mean(retrieve_times), 3),
+                "mean": round(mean(retrieve_times), 3),
                 "median": round(median(retrieve_times), 3),
             },
             "generate_time": {
-                "mean":   round(mean(generate_times), 3),
+                "mean": round(mean(generate_times), 3),
                 "median": round(median(generate_times), 3),
             },
-            "avg_sources_per_query": round(
-                mean(r.num_sources for r in self._records), 1
-            ),
-            "avg_answer_length": round(
-                mean(r.answer_length for r in self._records), 0
-            ),
+            "avg_sources_per_query": round(mean(r.num_sources for r in self._records), 1),
+            "avg_answer_length": round(mean(r.answer_length for r in self._records), 0),
         }
 
     def print_summary(self) -> None:
@@ -168,8 +166,6 @@ class MetricsTracker:
             with open(self.persist_path) as f:
                 data = json.load(f)
             self._records = [QueryMetric(**r) for r in data]
-            logger.info(
-                f"Loaded {len(self._records)} metrics from {self.persist_path}"
-            )
+            logger.info(f"Loaded {len(self._records)} metrics from {self.persist_path}")
         except Exception as e:
             logger.warning(f"Could not load metrics from {self.persist_path}: {e}")

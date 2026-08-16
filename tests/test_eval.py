@@ -8,6 +8,7 @@ Covers:
   - compute_latency_benchmarks
   - GET /eval endpoint (no results, with results)
 """
+
 import json
 import sys
 import pytest
@@ -33,6 +34,7 @@ from scripts.eval_retrieval import (
 # ---------------------------------------------------------------------------
 # Helpers: _context_precision
 # ---------------------------------------------------------------------------
+
 
 class TestContextPrecision:
     def test_all_relevant(self):
@@ -80,9 +82,12 @@ class TestContextPrecision:
 # Helpers: _context_recall
 # ---------------------------------------------------------------------------
 
+
 class TestContextRecall:
     def test_all_keywords_found(self):
-        docs = [{"text": "The gnb base station node ran architecture", "source": "x", "similarity": 0.9}]
+        docs = [
+            {"text": "The gnb base station node ran architecture", "source": "x", "similarity": 0.9}
+        ]
         score = _context_recall(docs, ["gnb", "base station", "node", "ran"])
         assert score == 1.0
 
@@ -118,6 +123,7 @@ class TestContextRecall:
 # ---------------------------------------------------------------------------
 # Helpers: _answer_relevance
 # ---------------------------------------------------------------------------
+
 
 class TestAnswerRelevance:
     def test_all_keywords_in_answer(self):
@@ -165,10 +171,19 @@ class TestAnswerRelevance:
 # Helpers: _faithfulness
 # ---------------------------------------------------------------------------
 
+
 class TestFaithfulness:
     def test_grounded_answer_scores_higher(self):
-        docs = [{"text": "The gNB is a base station node in the 3GPP specification.", "source": "x", "similarity": 0.9}]
-        grounded = "According to the 3GPP TS specification, the gNB base station node handles radio."
+        docs = [
+            {
+                "text": "The gNB is a base station node in the 3GPP specification.",
+                "source": "x",
+                "similarity": 0.9,
+            }
+        ]
+        grounded = (
+            "According to the 3GPP TS specification, the gNB base station node handles radio."
+        )
         ungrounded = "Pizza is delicious and everyone loves it very much indeed."
         assert _faithfulness(grounded, docs) > _faithfulness(ungrounded, docs)
 
@@ -185,9 +200,16 @@ class TestFaithfulness:
 # evaluate_answer_quality
 # ---------------------------------------------------------------------------
 
+
 class TestEvaluateAnswerQuality:
     def _make_docs(self):
-        return [{"text": "The gNB is a base station node ran.", "source": "38300-g10.docx", "similarity": 0.9}]
+        return [
+            {
+                "text": "The gNB is a base station node ran.",
+                "source": "38300-g10.docx",
+                "similarity": 0.9,
+            }
+        ]
 
     def test_good_answer_passes(self):
         case = TEST_CASES[0]  # "What is gNB?"
@@ -215,8 +237,15 @@ class TestEvaluateAnswerQuality:
     def test_result_has_required_keys(self):
         case = TEST_CASES[0]
         result = evaluate_answer_quality("Some answer text here.", case, self._make_docs())
-        for key in ["answer_relevance", "faithfulness", "answer_score",
-                    "is_substantive", "is_refusal", "answer_pass", "answer_preview"]:
+        for key in [
+            "answer_relevance",
+            "faithfulness",
+            "answer_score",
+            "is_substantive",
+            "is_refusal",
+            "answer_pass",
+            "answer_preview",
+        ]:
             assert key in result
 
     def test_score_bounded_0_to_1(self):
@@ -228,6 +257,7 @@ class TestEvaluateAnswerQuality:
 # ---------------------------------------------------------------------------
 # compute_latency_benchmarks
 # ---------------------------------------------------------------------------
+
 
 class TestLatencyBenchmarks:
     def test_retrieve_only(self):
@@ -278,6 +308,7 @@ class TestPercentile:
 # evaluate_retrieval_case (unit-level, mock retriever)
 # ---------------------------------------------------------------------------
 
+
 class TestEvaluateRetrievalCase:
     def _make_retriever(self, docs):
         r = MagicMock()
@@ -312,8 +343,15 @@ class TestEvaluateRetrievalCase:
         docs = [{"source": "38300-g10.docx", "text": "gnb", "similarity": 0.8}]
         retriever = self._make_retriever(docs)
         result = evaluate_retrieval_case(retriever, TEST_CASES[0])
-        for key in ["query", "retrieval_pass", "context_precision", "context_recall",
-                    "avg_similarity", "retrieve_time", "top_source"]:
+        for key in [
+            "query",
+            "retrieval_pass",
+            "context_precision",
+            "context_recall",
+            "avg_similarity",
+            "retrieve_time",
+            "top_source",
+        ]:
             assert key in result
 
     def test_retrieve_time_is_positive(self):
@@ -327,12 +365,72 @@ class TestEvaluateRetrievalCase:
 # GET /eval API endpoint
 # ---------------------------------------------------------------------------
 
+
 class TestEvalEndpoint:
+    @staticmethod
+    def _final_summary_payload():
+        return {
+            "evaluated_at": "2026-08-15T18:51:34Z",
+            "config": {
+                "run_name": "reranker-gated-final",
+                "dataset": "data/eval/3gpp_verified_rag_eval.jsonl",
+                "dataset_size": 60,
+                "answerable_cases": 39,
+                "refusal_cases": 21,
+                "llm_provider": "openai",
+                "generation_model": "gpt-4o-mini",
+                "embedding_provider": "openai",
+                "embedding_model": "text-embedding-3-small",
+                "vector_store_provider": "pinecone",
+                "indexed_vectors": 1561,
+                "reranker_enabled": True,
+                "reranker_model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+                "evidence_score_source": "reranker",
+                "evidence_gate_enabled": True,
+                "answer_verification_enabled": True,
+                "verifier_model": "gpt-4o-mini",
+            },
+            "summary": {
+                "retrieval": {
+                    "hit_at_1": 0.9487,
+                    "hit_at_3": 1.0,
+                    "hit_at_5": 1.0,
+                    "mrr": 0.9701,
+                },
+                "behavior": {
+                    "correct_answer_attempt_rate": 0.7692,
+                    "correct_refusal_rate": 1.0,
+                    "false_refusal_rate": 0.2308,
+                    "unsafe_answer_rate": 0.0,
+                },
+                "citations": {"citation_validity_rate": 1.0},
+                "groundedness": {"unsupported_answer_escape_rate": 0.0},
+            },
+            "cases": None,
+        }
+
+    @staticmethod
+    def _set_project_root(monkeypatch, tmp_path):
+        from src.api import main as api_main
+
+        monkeypatch.delenv("FINAL_EVAL_SUMMARY_PATH", raising=False)
+        monkeypatch.setattr(api_main, "PROJECT_ROOT", tmp_path)
+
+    @staticmethod
+    def _write_summary(path, payload=None):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload or TestEvalEndpoint._final_summary_payload()))
+
     @pytest.fixture(autouse=True)
     def mock_app_state(self):
         from src.api import main as api_main
+
         mock_vs = MagicMock()
-        mock_vs.get_stats.return_value = {"collection_name": "3gpp_specs", "total_chunks": 250, "persist_directory": "data/vectordb"}
+        mock_vs.get_stats.return_value = {
+            "collection_name": "3gpp_specs",
+            "total_chunks": 250,
+            "persist_directory": "data/vectordb",
+        }
         mock_metrics = MagicMock()
         mock_metrics.summary.return_value = {"total_queries": 0}
         api_main.app_state.vector_store = mock_vs
@@ -344,63 +442,95 @@ class TestEvalEndpoint:
 
     @pytest.fixture
     def client(self):
-        with patch("src.api.main.RAGChain"), \
-             patch("src.api.main.DocumentRetriever"), \
-             patch("src.api.main.OllamaLLM"):
+        from src.api import main as api_main
+
+        mock_llm = MagicMock()
+        mock_llm.is_available.return_value = True
+        with (
+            patch("src.api.main.RAGChain"),
+            patch("src.api.main.DocumentRetriever"),
+            patch("src.api.main.create_vector_store", return_value=api_main.app_state.vector_store),
+            patch("src.api.main.MetricsTracker", return_value=api_main.app_state.metrics),
+            patch("src.api.main._create_llm", return_value=mock_llm),
+        ):
             from src.api.main import app
             from fastapi.testclient import TestClient
+
             with TestClient(app, raise_server_exceptions=True) as c:
                 yield c
 
     def test_eval_returns_200(self, client, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+        self._set_project_root(monkeypatch, tmp_path)
         response = client.get("/eval")
         assert response.status_code == 200
 
     def test_eval_unavailable_when_no_file(self, client, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+        self._set_project_root(monkeypatch, tmp_path)
         data = client.get("/eval").json()
         assert data["available"] is False
 
-    def test_eval_available_with_results_file(self, client, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        # Create a fake eval_results.json
-        eval_dir = tmp_path / "data"
-        eval_dir.mkdir()
-        eval_data = {
-            "evaluated_at": "2026-02-19T00:00:00Z",
-            "config": {"top_k": 5, "full_eval": False, "total_chunks": 43121},
-            "summary": {
-                "retrieval": {"pass_rate": 0.8, "passed": 8, "total": 10},
-                "answer": {},
-                "latency": {"retrieve": {"p50": 0.25, "p95": 0.5, "mean": 0.3}},
-            },
-            "cases": [],
-        }
-        (eval_dir / "eval_results.json").write_text(json.dumps(eval_data))
+    def test_eval_prefers_packaged_summary_file(self, client, tmp_path, monkeypatch):
+        self._set_project_root(monkeypatch, tmp_path)
+        self._write_summary(tmp_path / "verified_rag_final_summary.json")
 
         data = client.get("/eval").json()
+
         assert data["available"] is True
-        assert data["evaluated_at"] == "2026-02-19T00:00:00Z"
-        assert data["summary"]["retrieval"]["pass_rate"] == 0.8
-        assert data["config"]["total_chunks"] == 43121
+        assert data["evaluated_at"] == "2026-08-15T18:51:34Z"
+        assert data["summary"]["retrieval"]["hit_at_1"] == 0.9487
+        assert data["summary"]["behavior"]["correct_answer_attempt_rate"] == 0.7692
+        assert data["config"]["dataset_size"] == 60
+        assert data["cases"] is None
 
-    def test_eval_summary_has_retrieval_key(self, client, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        eval_dir = tmp_path / "data"
-        eval_dir.mkdir()
-        eval_data = {
-            "evaluated_at": "2026-02-19T00:00:00Z",
-            "config": {},
-            "summary": {"retrieval": {"pass_rate": 0.9}},
-            "cases": [],
-        }
-        (eval_dir / "eval_results.json").write_text(json.dumps(eval_data))
+    def test_eval_uses_local_fallback_summary_file(self, client, tmp_path, monkeypatch):
+        self._set_project_root(monkeypatch, tmp_path)
+        self._write_summary(tmp_path / "data" / "eval" / "verified_rag_final_summary.json")
 
         data = client.get("/eval").json()
+
+        assert data["available"] is True
         assert "retrieval" in data["summary"]
 
+    def test_eval_malformed_summary_returns_unavailable(self, client, tmp_path, monkeypatch):
+        self._set_project_root(monkeypatch, tmp_path)
+        summary_path = tmp_path / "verified_rag_final_summary.json"
+        summary_path.write_text("{not-json")
+
+        data = client.get("/eval").json()
+
+        assert data["available"] is False
+
+    def test_eval_valid_final_summary_metrics(self, client, tmp_path, monkeypatch):
+        self._set_project_root(monkeypatch, tmp_path)
+        self._write_summary(tmp_path / "verified_rag_final_summary.json")
+
+        data = client.get("/eval").json()
+        config = data["config"]
+        summary = data["summary"]
+
+        assert config["run_name"] == "reranker-gated-final"
+        assert config["dataset"] == "data/eval/3gpp_verified_rag_eval.jsonl"
+        assert config["dataset_size"] == 60
+        assert config["answerable_cases"] == 39
+        assert config["refusal_cases"] == 21
+        assert summary["behavior"]["unsafe_answer_rate"] == 0.0
+        assert summary["groundedness"]["unsupported_answer_escape_rate"] == 0.0
+        assert summary["citations"]["citation_validity_rate"] == 1.0
+
+    def test_eval_does_not_return_secrets_or_case_payloads(self, client, tmp_path, monkeypatch):
+        self._set_project_root(monkeypatch, tmp_path)
+        self._write_summary(tmp_path / "verified_rag_final_summary.json")
+
+        data = client.get("/eval").json()
+        public_payload = json.dumps(data).lower()
+
+        assert data["available"] is True
+        assert data["cases"] is None
+        assert "api_key" not in public_payload
+        assert "secret" not in public_payload
+        assert "prompt" not in public_payload
+
     def test_eval_in_root_response(self, client, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+        self._set_project_root(monkeypatch, tmp_path)
         data = client.get("/").json()
         assert "eval" in data

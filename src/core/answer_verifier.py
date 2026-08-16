@@ -65,9 +65,7 @@ class AnswerVerifier:
         client: Optional[Any] = None,
         max_tokens: int = 900,
     ) -> None:
-        self.enabled = (
-            settings.answer_verification_enabled if enabled is None else enabled
-        )
+        self.enabled = settings.answer_verification_enabled if enabled is None else enabled
         self.model = model or settings.openai_verifier_model or settings.openai_model
         self.max_tokens = max_tokens
 

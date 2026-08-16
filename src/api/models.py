@@ -57,7 +57,7 @@ class SourceDocument(BaseModel):
         default=None, description="Per-response citation ID, e.g. 'S1'"
     )
     source: str = Field(description="Source document filename")
-    similarity: float = Field(description="Semantic similarity score (0-1)")
+    similarity: float = Field(description="Original vector semantic similarity score (0-1)")
     text: str = Field(description="Preview of the retrieved chunk text")
     domain: Optional[str] = Field(default=None, description="'RAN' or 'CORE'")
     generation: Optional[str] = Field(default=None, description="'5G' or 'LTE'")
@@ -90,8 +90,8 @@ class EvidenceMetadata(BaseModel):
 
     sufficient: bool = Field(description="True if retrieval evidence passed the gate")
     reason: str = Field(description="Stable evidence decision reason code")
-    top_score: float = Field(description="Highest retrieved similarity score")
-    mean_score: float = Field(description="Mean similarity over configured top-N")
+    top_score: float = Field(description="Highest evidence score from the configured score source")
+    mean_score: float = Field(description="Mean evidence score over configured top-N")
     qualifying_docs: int = Field(description="Documents meeting the minimum evidence score")
     total_docs: int = Field(description="Total retrieved documents evaluated")
     score_source: Optional[str] = Field(
@@ -202,6 +202,10 @@ class StatsResponse(BaseModel):
     vector_store: dict = Field(description="Vector store statistics")
     active_sessions: int = Field(description="Number of active conversation sessions")
     metrics: dict = Field(description="Aggregated query performance metrics")
+    providers: dict = Field(
+        default_factory=dict,
+        description="Configured providers and guarded RAG settings without secrets",
+    )
 
 
 # ---------------------------------------------------------------------------

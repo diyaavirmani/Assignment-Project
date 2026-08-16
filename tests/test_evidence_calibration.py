@@ -28,8 +28,44 @@ def _cases():
     ]
 
 
-def test_fixed_split_file_is_deterministic_and_complete():
-    cases = calib.load_eval_cases("eval_results/run_20260815_165508.json")
+ANSWER_PREFIXES = {"df", "acr", "lookup", "proc", "cmp", "multi", "cite"}
+
+
+def _category(case_id):
+    prefix = case_id.split("-", 1)[0]
+    return {
+        "df": "direct_fact",
+        "acr": "acronym_definition",
+        "lookup": "specification_lookup",
+        "proc": "procedural",
+        "cmp": "comparison",
+        "multi": "multi_source",
+        "cite": "citation_stress",
+        "ood": "out_of_domain",
+        "unans": "unanswerable",
+        "adv": "adversarial",
+        "prem": "misleading_premise",
+    }[prefix]
+
+
+def _committed_split_baseline(tmp_path):
+    split = calib.load_split("data/eval/eval_split.json")
+    case_ids = [*split["calibration"], *split["validation"]]
+    cases = []
+    for case_id in case_ids:
+        prefix = case_id.split("-", 1)[0]
+        expected = "answer" if prefix in ANSWER_PREFIXES else "refuse"
+        top_score = 0.9 if expected == "answer" else 0.2
+        scores = [top_score, max(top_score - 0.05, 0.0), max(top_score - 0.1, 0.0)]
+        cases.append(_case(case_id, expected, _category(case_id), scores))
+
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps({"cases": cases}), encoding="utf-8")
+    return baseline
+
+
+def test_fixed_split_file_is_deterministic_and_complete(tmp_path):
+    cases = calib.load_eval_cases(_committed_split_baseline(tmp_path))
     split = calib.load_split("data/eval/eval_split.json")
 
     calib.validate_split(cases, split)
@@ -131,7 +167,7 @@ def test_no_validation_leakage_in_selected_candidate(tmp_path):
 
 def test_candidate_serialization_and_report(tmp_path):
     payload = calib.calibration_payload(
-        "eval_results/run_20260815_165508.json",
+        _committed_split_baseline(tmp_path),
         "data/eval/eval_split.json",
     )
     output = tmp_path / "candidate.json"

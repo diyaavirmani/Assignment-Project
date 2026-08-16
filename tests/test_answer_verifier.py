@@ -52,6 +52,33 @@ def _client(payload):
 
 
 class TestAnswerVerifier:
+    def test_supported_f1_interface_answer_passes(self):
+        verifier = AnswerVerifier(
+            model="gpt-test",
+            client=_client(
+                {
+                    "claims": [
+                        {
+                            "claim": "The F1 interface connects the gNB-CU and gNB-DU.",
+                            "status": "SUPPORTED",
+                            "source_ids": ["S2"],
+                        }
+                    ]
+                }
+            ),
+        )
+
+        result = verifier.verify(
+            "What is the F1 interface used for?",
+            DOCS,
+            "The F1 interface connects the gNB-CU and gNB-DU [S2].",
+        )
+
+        assert result.passed is True
+        assert result.reason == REASON_VERIFIED
+        assert result.citation_valid is True
+        assert result.cited_sources == ["S2"]
+
     def test_fully_supported_answer_passes(self):
         verifier = AnswerVerifier(
             model="gpt-test",
@@ -137,6 +164,44 @@ class TestAnswerVerifier:
         assert result.passed is False
         assert result.reason == REASON_CONTRADICTION
         assert result.contradicted_claims == ["The gNB-DU is not connected through F1."]
+
+    def test_misleading_e1_du_upf_premise_remains_blocked(self):
+        docs = [
+            {
+                "text": "The E1 interface connects the gNB-CU-CP and gNB-CU-UP.",
+                "source": "38401-g30.docx",
+                "chunk_index": 0,
+                "similarity": 0.91,
+                "spec_number": "38.401",
+                "spec_title": "NG-RAN architecture",
+            }
+        ]
+        verifier = AnswerVerifier(
+            model="gpt-test",
+            client=_client(
+                {
+                    "claims": [
+                        {
+                            "claim": "The E1 interface connects gNB-DU to the UPF.",
+                            "status": "CONTRADICTED",
+                            "source_ids": ["S1"],
+                        }
+                    ]
+                }
+            ),
+        )
+
+        result = verifier.verify(
+            "Explain why the E1 interface connects gNB-DU to the UPF.",
+            docs,
+            "The E1 interface connects gNB-DU to the UPF [S1].",
+        )
+
+        assert result.passed is False
+        assert result.reason == REASON_CONTRADICTION
+        assert result.contradicted_claims == [
+            "The E1 interface connects gNB-DU to the UPF."
+        ]
 
     def test_valid_citations_pass_deterministic_validation(self):
         verifier = AnswerVerifier(enabled=False)
