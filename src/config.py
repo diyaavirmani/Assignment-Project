@@ -8,7 +8,7 @@ legacy ``.env`` files with e.g. ``OPENAI_API_KEY`` don't cause errors.
 Environment variable names match the field names exactly (case-insensitive).
 Override any default by exporting the variable before starting the server:
 
-    export LLM_MODEL=mistral
+    export LLM_PROVIDER=openai
     uvicorn src.api.main:app --reload
 
 See ``.env.example`` in the project root for a full reference.
@@ -24,15 +24,18 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables / .env file.
 
     Attributes:
-        ollama_base_url: URL of the Ollama server (default: localhost).
-        llm_model: Name of the Ollama model to use. Must be pulled first:
+        llm_provider: Active LLM provider. Production default is OpenAI.
+        ollama_base_url: URL of the Ollama server when LLM_PROVIDER=ollama.
+        llm_model: Name of the Ollama model to use when LLM_PROVIDER=ollama.
+            Must be pulled first:
             ``ollama pull <model>``.
         max_tokens: Maximum number of tokens in the LLM response.
         temperature: Sampling temperature. Lower = more deterministic (0.0–1.0).
-        embedding_model: Shortcut key for the sentence-transformer model.
-            Must match the model used when the vector index was built.
-        vector_db_path: Directory where ChromaDB persists its data.
-        collection_name: ChromaDB collection that holds the indexed chunks.
+        embedding_provider: Active embedding provider. Production default is OpenAI.
+        embedding_model: Shortcut key for the legacy sentence-transformer model.
+        vector_store_provider: Active vector-store provider. Production default is Pinecone.
+        vector_db_path: Directory where legacy ChromaDB persists its data.
+        collection_name: Legacy ChromaDB collection that holds indexed chunks.
         chunk_size: Target character length of each document chunk.
         chunk_overlap: Character overlap between adjacent chunks for context
             continuity at boundaries.
@@ -51,8 +54,8 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
-    # LLM Provider: "ollama" (local), "groq" (cloud), or "openai" (cloud)
-    llm_provider: str = "ollama"
+    # LLM Provider: "openai" (production), "ollama" (local), or "groq" (cloud)
+    llm_provider: str = "openai"
 
     # Ollama Configuration (local LLM - no API key needed)
     ollama_base_url: str = "http://localhost:11434"
@@ -83,18 +86,18 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_embedding_model: str = "text-embedding-3-small"
 
-    # Embedding Configuration: "local" or "openai"
-    embedding_provider: str = "local"
+    # Embedding Configuration: "openai" (production) or "local"
+    embedding_provider: str = "openai"
     embedding_model: str = "bge-small"  # options: mini, mpnet, bge-small, bge-base
 
-    # Vector Database Configuration: "chroma" or "pinecone"
-    vector_store_provider: str = "chroma"
+    # Vector Database Configuration: "pinecone" (production) or "chroma"
+    vector_store_provider: str = "pinecone"
     vector_db_path: str = "./data/vectordb"
     collection_name: str = "3gpp_specs"
 
     # Pinecone Vector Database Configuration (cloud vector store)
     pinecone_api_key: str = ""
-    pinecone_index_name: str = ""
+    pinecone_index_name: str = "3gpp-rag"
     pinecone_namespace: str = "3gpp-specs"
 
     # Document Processing
@@ -127,8 +130,7 @@ class Settings(BaseSettings):
     answer_verification_enabled: bool = True
     openai_verifier_model: str = ""
 
-    # Cross-encoder reranking. Reranker scores are recorded for analysis, but
-    # EvidenceGate continues to consume vector cosine similarity.
+    # Cross-encoder reranking between vector retrieval and EvidenceGate.
     reranker_enabled: bool = True
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L6-v2"
     reranker_candidate_k: int = 10
@@ -141,7 +143,7 @@ class Settings(BaseSettings):
     )
     @classmethod
     def validate_evidence_score(cls, v: float) -> float:
-        """Evidence score thresholds are expected to be cosine similarities."""
+        """Evidence score thresholds are normalized into a 0.0-1.0 range."""
         if not 0.0 <= v <= 1.0:
             raise ValueError("evidence score thresholds must be between 0.0 and 1.0")
         return v

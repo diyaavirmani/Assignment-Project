@@ -9,6 +9,7 @@ Ollama runs open-source models locally:
 Install Ollama: https://ollama.com
 Pull a model:  ollama pull llama3.2
 """
+
 import logging
 from typing import List, Dict, Optional, Iterator
 
@@ -49,11 +50,10 @@ class OllamaLLM:
         """
         try:
             import ollama
+
             self._ollama = ollama
         except ImportError:
-            raise ImportError(
-                "ollama package not installed. Run: pip install ollama"
-            )
+            raise ImportError("ollama package not installed. Run: pip install ollama")
 
         self.model = model
         self.base_url = base_url
@@ -71,10 +71,7 @@ class OllamaLLM:
             models = self._client.list()
             available = [m.model for m in models.models]
             if not any(self.model in m for m in available):
-                logger.warning(
-                    f"Model '{self.model}' not found. "
-                    f"Run: ollama pull {self.model}"
-                )
+                logger.warning(f"Model '{self.model}' not found. " f"Run: ollama pull {self.model}")
                 return False
             return True
         except Exception as e:
@@ -170,10 +167,12 @@ class OllamaLLM:
     ) -> List[Dict[str, str]]:
         messages: List[Dict[str, str]] = []
 
-        messages.append({
-            "role": "system",
-            "content": system_prompt or SYSTEM_PROMPT,
-        })
+        messages.append(
+            {
+                "role": "system",
+                "content": system_prompt or SYSTEM_PROMPT,
+            }
+        )
 
         if history:
             messages.extend(history)

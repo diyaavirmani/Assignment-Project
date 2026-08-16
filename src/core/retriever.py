@@ -2,10 +2,11 @@
 Semantic document retrieval for the 3GPP RAG pipeline.
 
 Given a natural language query this module:
-  1. Embeds the query using the same model used at index time (bge-small by default)
-  2. Performs approximate nearest-neighbour search in the ChromaDB vector store
+  1. Embeds the query using the provider configured at index time
+  2. Performs approximate nearest-neighbour search in the configured vector store
   3. Applies an optional source-document filter
-  4. Returns the top-k most similar chunks with similarity scores
+  4. Optionally reranks candidates with a cross-encoder
+  5. Returns top-k chunks with vector and reranker scores when enabled
 
 The retriever is intentionally stateless (no caching) so it can be safely
 shared across concurrent sessions via the FastAPI app_state.
@@ -31,8 +32,8 @@ class DocumentRetriever:
     """Semantic retriever that embeds queries and searches the vector store.
 
     Attributes:
-        vector_store: ChromaDB-backed store holding all indexed spec chunks.
-        embedding_generator: Sentence-transformer model for query encoding.
+        vector_store: Configured store holding indexed spec chunks.
+        embedding_generator: Configured model/client for query encoding.
         top_k: Default number of chunks to return per query.
     """
 
@@ -87,7 +88,7 @@ class DocumentRetriever:
         domain: Optional[str] = None,
         generation: Optional[str] = None,
     ) -> Optional[Dict]:
-        """Build a ChromaDB ``where`` clause from domain/generation filters.
+        """Build a vector-store metadata filter from domain/generation filters.
 
         Returns None when no filters are requested (search entire collection).
         """
@@ -119,9 +120,9 @@ class DocumentRetriever:
             source_filter: If set, only return chunks whose source filename
                 contains this string (e.g. "38401"). Applied post-retrieval.
             domain: If set, restrict retrieval to "RAN" or "CORE" chunks.
-                Applied via ChromaDB metadata filter (pre-retrieval).
+                Applied via vector-store metadata filter (pre-retrieval).
             generation: If set, restrict retrieval to "5G" or "LTE" chunks.
-                Applied via ChromaDB metadata filter (pre-retrieval).
+                Applied via vector-store metadata filter (pre-retrieval).
 
         Returns:
             List of chunk dicts, each with keys:
@@ -129,6 +130,8 @@ class DocumentRetriever:
                 - source      (str)   : filename of the source document
                 - chunk_index (int)   : position of the chunk in its document
                 - similarity  (float) : cosine similarity in [0, 1]
+                - vector_similarity (float, optional): original vector score
+                - reranker_score (float, optional): normalized reranker score
                 - domain      (str)   : "RAN" | "CORE" | "unknown"
                 - generation  (str)   : "5G" | "LTE" | "unknown"
                 - spec_number (str)   : e.g. "38.300"
@@ -246,7 +249,7 @@ class DocumentRetriever:
             return False
         if settings.vector_store_provider.strip().lower() != "pinecone":
             return False
-        return created_vector_store and type(self.vector_store).__name__ == "PineconeVectorStore"
+        return type(self.vector_store).__name__ == "PineconeVectorStore"
 
     def format_context(self, documents: List[Dict]) -> str:
         """Format retrieved chunks into a numbered context block for the LLM prompt.

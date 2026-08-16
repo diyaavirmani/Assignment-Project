@@ -4,6 +4,7 @@ Document processing module for parsing and chunking 3GPP specifications
 This module is the canonical entry point referenced in the README and CLI.
 It delegates to UnifiedDocumentProcessor which handles PDF, DOCX, and DOC.
 """
+
 from pathlib import Path
 from typing import List, Dict
 import logging
@@ -66,6 +67,7 @@ class DocumentProcessor:
     def save_chunks(self, chunks: List[Dict], output_path: Path) -> None:
         """Save chunks list to a JSON file."""
         import json
+
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
@@ -75,8 +77,8 @@ class DocumentProcessor:
 
 if __name__ == "__main__":
     import sys
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s | %(levelname)s | %(message)s")
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
     processor = DocumentProcessor()
     data_dir = Path("data/raw")

@@ -4,6 +4,7 @@ Tests for src/core/vector_store.py (VectorStore)
 Uses a real ChromaDB in-memory/temp-dir client so no persistent state leaks
 between tests.
 """
+
 import pytest
 import tempfile
 from pathlib import Path
@@ -13,10 +14,12 @@ from pathlib import Path
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def tmp_vector_store(tmp_path):
     """A fresh VectorStore backed by a temp directory."""
     from src.core.vector_store import VectorStore
+
     return VectorStore(
         persist_directory=str(tmp_path / "vectordb"),
         collection_name="test_collection",
@@ -27,9 +30,11 @@ def tmp_vector_store(tmp_path):
 # Initialisation
 # ---------------------------------------------------------------------------
 
+
 class TestVectorStoreInit:
     def test_creates_persist_directory(self, tmp_path):
         from src.core.vector_store import VectorStore
+
         db_path = tmp_path / "new_db"
         assert not db_path.exists()
         VectorStore(persist_directory=str(db_path))
@@ -44,14 +49,42 @@ class TestVectorStoreInit:
         assert stats["collection_name"] == "test_collection"
 
 
+class TestIndexedSpecs:
+    def test_get_indexed_spec_numbers_uses_metadata_filters(self, tmp_vector_store, mock_embedding):
+        chunks = [
+            {
+                "text": "NR architecture overview",
+                "embedding": mock_embedding,
+                "metadata": {
+                    "source": "38300-g30.docx",
+                    "chunk_index": 0,
+                    "spec_number": "38.300",
+                },
+            },
+            {
+                "text": "NG-RAN architecture",
+                "embedding": mock_embedding,
+                "metadata": {
+                    "source": "38401-g30.docx",
+                    "chunk_index": 1,
+                    "spec_number": "38.401",
+                },
+            },
+        ]
+        tmp_vector_store.add_chunks(chunks)
+
+        indexed = tmp_vector_store.get_indexed_spec_numbers(["38.300", "38.401", "38.211"])
+
+        assert indexed == {"38.300", "38.401"}
+
+
 # ---------------------------------------------------------------------------
 # add_chunks
 # ---------------------------------------------------------------------------
 
+
 class TestAddChunks:
-    def test_adds_chunks_to_collection(
-        self, tmp_vector_store, sample_chunks_with_embeddings
-    ):
+    def test_adds_chunks_to_collection(self, tmp_vector_store, sample_chunks_with_embeddings):
         tmp_vector_store.add_chunks(sample_chunks_with_embeddings)
         stats = tmp_vector_store.get_stats()
         assert stats["total_chunks"] == len(sample_chunks_with_embeddings)
@@ -69,9 +102,7 @@ class TestAddChunks:
         tmp_vector_store.add_chunks(chunks)
         assert tmp_vector_store.get_stats()["total_chunks"] == 150
 
-    def test_metadata_stored_correctly(
-        self, tmp_vector_store, sample_chunks_with_embeddings
-    ):
+    def test_metadata_stored_correctly(self, tmp_vector_store, sample_chunks_with_embeddings):
         tmp_vector_store.add_chunks(sample_chunks_with_embeddings)
         # Query back and check a metadata field exists
         results = tmp_vector_store.query(
@@ -86,6 +117,7 @@ class TestAddChunks:
 # ---------------------------------------------------------------------------
 # query
 # ---------------------------------------------------------------------------
+
 
 class TestQuery:
     def test_query_returns_expected_keys(
@@ -118,18 +150,15 @@ class TestQuery:
 # clear
 # ---------------------------------------------------------------------------
 
+
 class TestClear:
-    def test_clear_removes_all_chunks(
-        self, tmp_vector_store, sample_chunks_with_embeddings
-    ):
+    def test_clear_removes_all_chunks(self, tmp_vector_store, sample_chunks_with_embeddings):
         tmp_vector_store.add_chunks(sample_chunks_with_embeddings)
         assert tmp_vector_store.get_stats()["total_chunks"] > 0
         tmp_vector_store.clear()
         assert tmp_vector_store.get_stats()["total_chunks"] == 0
 
-    def test_can_add_after_clear(
-        self, tmp_vector_store, sample_chunks_with_embeddings
-    ):
+    def test_can_add_after_clear(self, tmp_vector_store, sample_chunks_with_embeddings):
         tmp_vector_store.add_chunks(sample_chunks_with_embeddings)
         tmp_vector_store.clear()
         tmp_vector_store.add_chunks(sample_chunks_with_embeddings[:1])

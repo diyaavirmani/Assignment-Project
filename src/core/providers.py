@@ -22,9 +22,7 @@ def create_embedding_generator(provider: Optional[str] = None):
             model_name=settings.openai_embedding_model,
             api_key=settings.openai_api_key or None,
         )
-    raise ValueError(
-        "Invalid EMBEDDING_PROVIDER. Expected one of: local, openai"
-    )
+    raise ValueError("Invalid EMBEDDING_PROVIDER. Expected one of: local, openai")
 
 
 def create_vector_store(provider: Optional[str] = None):
@@ -41,9 +39,7 @@ def create_vector_store(provider: Optional[str] = None):
             namespace=settings.pinecone_namespace,
             api_key=settings.pinecone_api_key or None,
         )
-    raise ValueError(
-        "Invalid VECTOR_STORE_PROVIDER. Expected one of: chroma, pinecone"
-    )
+    raise ValueError("Invalid VECTOR_STORE_PROVIDER. Expected one of: chroma, pinecone")
 
 
 def create_llm(provider: Optional[str] = None):

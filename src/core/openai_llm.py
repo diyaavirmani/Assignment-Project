@@ -44,9 +44,7 @@ class OpenAILLM:
             ValueError: If required OpenAI configuration is missing.
         """
         self.model = model if model is not None else settings.openai_model
-        self.temperature = (
-            temperature if temperature is not None else settings.temperature
-        )
+        self.temperature = temperature if temperature is not None else settings.temperature
         self.max_tokens = max_tokens if max_tokens is not None else settings.max_tokens
 
         if not self.model:

@@ -3,12 +3,12 @@ Pinecone vector store wrapper for the 3GPP RAG pipeline.
 
 The class intentionally returns query results in the same broad shape as the
 existing Chroma-backed VectorStore: ``documents``, ``metadatas``, and
-``distances``. That keeps this implementation isolated until the retriever is
-explicitly wired to use Pinecone.
+``distances``. That keeps the retriever interface stable while Pinecone is the
+production vector-store provider.
 """
 
 import logging
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from src.config import settings
 
@@ -60,13 +60,13 @@ class PineconeVectorStore:
             ImportError: If the Pinecone SDK is not installed and no client/index is injected.
             ValueError: If required Pinecone configuration is missing.
         """
-        self.index_name = (
-            index_name if index_name is not None else settings.pinecone_index_name
-        )
+        self.index_name = index_name if index_name is not None else settings.pinecone_index_name
         self.namespace = (
             namespace if namespace is not None else settings.pinecone_namespace
         ) or "3gpp-specs"
         self.batch_size = batch_size
+        self._indexed_spec_cache: Set[str] = set()
+        self._indexed_spec_cache_candidates: Set[str] = set()
 
         if self.batch_size <= 0:
             raise ValueError("batch_size must be greater than zero")
@@ -116,6 +116,7 @@ class PineconeVectorStore:
         for batch in self._batched(vectors, self.batch_size):
             self.index.upsert(vectors=list(batch), namespace=self.namespace)
 
+        self._invalidate_indexed_spec_cache()
         logger.info("Upserted %s chunks into Pinecone namespace %s", len(chunks), self.namespace)
 
     def query(
@@ -177,10 +178,77 @@ class PineconeVectorStore:
             "total_vector_count": total_count,
         }
 
+    def get_indexed_spec_numbers(self, candidate_spec_numbers: Iterable[str]) -> Set[str]:
+        """
+        Return candidate 3GPP spec numbers present in this Pinecone namespace.
+
+        Pinecone serverless does not support metadata filtering on
+        ``describe_index_stats()``, so this uses one unfiltered stats call to
+        determine vector dimension and then probes candidates with
+        metadata-filtered ``query`` calls. Query responses request no metadata
+        or values; only the presence of a match matters.
+        """
+        candidates = {spec_number for spec_number in candidate_spec_numbers if spec_number}
+        if not candidates:
+            return set()
+
+        cached_hits = candidates & self._indexed_spec_cache
+        candidates_to_probe = candidates - self._indexed_spec_cache_candidates
+        if not candidates_to_probe:
+            return cached_hits
+
+        if not self.namespace:
+            logger.warning("Cannot detect indexed Pinecone specs without a namespace")
+            return cached_hits
+
+        try:
+            stats = self.index.describe_index_stats()
+        except Exception as e:
+            logger.warning("Failed to read Pinecone index stats for catalog detection: %s", e)
+            return cached_hits
+
+        dimension = self._dimension_from_stats(stats)
+        if dimension is None:
+            logger.warning("Cannot detect indexed Pinecone specs without index dimension")
+            return cached_hits
+
+        probe = [0.0] * dimension
+        probe[0] = 1.0
+
+        indexed: Set[str] = set()
+        checked: Set[str] = set()
+        for spec_number in candidates_to_probe:
+            try:
+                response = self.index.query(
+                    vector=probe,
+                    top_k=1,
+                    namespace=self.namespace,
+                    filter={"spec_number": {"$eq": spec_number}},
+                    include_metadata=False,
+                    include_values=False,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to probe Pinecone indexed status for TS %s: %s",
+                    spec_number,
+                    e,
+                )
+                continue
+
+            checked.add(spec_number)
+            matches = self._read(response, "matches", default=[]) or []
+            if matches:
+                indexed.add(spec_number)
+
+        self._indexed_spec_cache.update(indexed)
+        self._indexed_spec_cache_candidates.update(checked)
+        return cached_hits | indexed
+
     def clear(self) -> None:
         """Clear only this store's namespace, leaving the index intact."""
         logger.warning("Clearing Pinecone namespace: %s", self.namespace)
         self.index.delete(delete_all=True, namespace=self.namespace)
+        self._invalidate_indexed_spec_cache()
 
     def _metadata_for_chunk(self, chunk: Dict, position: int) -> Dict:
         text = chunk["text"]
@@ -237,6 +305,21 @@ class PineconeVectorStore:
     def _batched(vectors: Sequence[Dict], size: int) -> Iterable[Sequence[Dict]]:
         for i in range(0, len(vectors), size):
             yield vectors[i : i + size]
+
+    def _invalidate_indexed_spec_cache(self) -> None:
+        self._indexed_spec_cache.clear()
+        self._indexed_spec_cache_candidates.clear()
+
+    @classmethod
+    def _dimension_from_stats(cls, stats: Any) -> Optional[int]:
+        raw_dimension = cls._read(stats, "dimension")
+        try:
+            dimension = int(raw_dimension)
+        except (TypeError, ValueError):
+            return None
+        if dimension <= 0:
+            return None
+        return dimension
 
     @staticmethod
     def _read(obj: Any, key: str, default: Any = None) -> Any:

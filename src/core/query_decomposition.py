@@ -27,6 +27,7 @@ its first token, and a tail that repeats part of a side reads awkwardly —
 both are harmless for embedding purposes and accepted for simplicity.
 Non-comparison queries return no sub-queries and cost nothing.
 """
+
 import re
 from typing import List
 

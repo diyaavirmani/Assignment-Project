@@ -8,6 +8,7 @@ Groq offers free API access to open-source models:
 
 Get a free API key: https://console.groq.com/keys
 """
+
 import logging
 from typing import List, Dict, Optional, Iterator
 
@@ -48,13 +49,13 @@ class GroqLLM:
         """
         try:
             from groq import Groq
+
             self._groq_cls = Groq
         except ImportError:
-            raise ImportError(
-                "groq package not installed. Run: pip install groq"
-            )
+            raise ImportError("groq package not installed. Run: pip install groq")
 
         import os
+
         self.model = model
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.temperature = temperature
@@ -160,10 +161,12 @@ class GroqLLM:
     ) -> List[Dict[str, str]]:
         messages: List[Dict[str, str]] = []
 
-        messages.append({
-            "role": "system",
-            "content": system_prompt or SYSTEM_PROMPT,
-        })
+        messages.append(
+            {
+                "role": "system",
+                "content": system_prompt or SYSTEM_PROMPT,
+            }
+        )
 
         if history:
             messages.extend(history)

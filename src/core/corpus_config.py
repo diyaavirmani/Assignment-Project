@@ -68,6 +68,7 @@ filings have XBRL tags, etc.  Provide a corpus-specific cleaner here.
 # CorpusConfig dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CorpusConfig:
     """
@@ -134,6 +135,7 @@ class CorpusConfig:
 # Generic (no-op) text cleaner
 # ---------------------------------------------------------------------------
 
+
 def generic_text_cleaner(text: str) -> str:
     """Minimal cleaner: collapse whitespace and remove non-printable chars.
 
@@ -149,6 +151,7 @@ def generic_text_cleaner(text: str) -> str:
 # ---------------------------------------------------------------------------
 # 3GPP-specific text cleaner
 # ---------------------------------------------------------------------------
+
 
 def threegpp_text_cleaner(text: str) -> str:
     """Clean text extracted from 3GPP specification PDFs/DOCX files.
@@ -180,6 +183,7 @@ def threegpp_text_cleaner(text: str) -> str:
 # ---------------------------------------------------------------------------
 # 3GPP corpus factory
 # ---------------------------------------------------------------------------
+
 
 def build_3gpp_corpus_config() -> CorpusConfig:
     """Return the CorpusConfig for the 3GPP specification corpus.

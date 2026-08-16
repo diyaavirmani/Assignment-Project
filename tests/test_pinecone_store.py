@@ -143,9 +143,7 @@ class TestPineconeQuery:
             namespace="test-namespace",
         )
 
-    def test_metadata_filter_forwarding(
-        self, pinecone_store, pinecone_index, mock_embedding
-    ):
+    def test_metadata_filter_forwarding(self, pinecone_store, pinecone_index, mock_embedding):
         pinecone_index.query.return_value = {"matches": []}
         where_filter = {"domain": {"$eq": "RAN"}}
 
@@ -180,6 +178,107 @@ class TestPineconeStatsAndClear:
             delete_all=True,
             namespace="test-namespace",
         )
+
+
+class TestPineconeIndexedSpecs:
+    def test_get_indexed_spec_numbers_uses_serverless_query_probe(
+        self, pinecone_store, pinecone_index
+    ):
+        pinecone_index.describe_index_stats.return_value = {
+            "dimension": 3,
+            "total_vector_count": 14,
+        }
+
+        def query(*, filter=None, **kwargs):
+            spec_number = filter["spec_number"]["$eq"]
+            if spec_number in {"38.300", "38.401"}:
+                return {"matches": [{"id": f"{spec_number}:0"}]}
+            return {"matches": []}
+
+        pinecone_index.query.side_effect = query
+
+        indexed = pinecone_store.get_indexed_spec_numbers(["38.300", "38.401", "38.211"])
+
+        assert indexed == {"38.300", "38.401"}
+        pinecone_index.describe_index_stats.assert_called_once_with()
+        assert pinecone_index.query.call_count == 3
+        for call in pinecone_index.query.call_args_list:
+            assert call.kwargs["vector"] == [1.0, 0.0, 0.0]
+            assert call.kwargs["top_k"] == 1
+            assert call.kwargs["namespace"] == "test-namespace"
+            assert call.kwargs["filter"]["spec_number"]["$eq"] in {
+                "38.300",
+                "38.401",
+                "38.211",
+            }
+            assert call.kwargs["include_metadata"] is False
+            assert call.kwargs["include_values"] is False
+
+    def test_get_indexed_spec_numbers_supports_sdk_object_matches(
+        self, pinecone_store, pinecone_index
+    ):
+        pinecone_index.describe_index_stats.return_value = SimpleNamespace(dimension=2)
+        pinecone_index.query.return_value = SimpleNamespace(
+            matches=[SimpleNamespace(id="38300-g30.docx:0")]
+        )
+
+        indexed = pinecone_store.get_indexed_spec_numbers(["38.300"])
+
+        assert indexed == {"38.300"}
+
+    def test_get_indexed_spec_numbers_returns_empty_for_invalid_dimension(
+        self, pinecone_store, pinecone_index
+    ):
+        pinecone_index.describe_index_stats.return_value = {"dimension": 0}
+
+        indexed = pinecone_store.get_indexed_spec_numbers(["38.300"])
+
+        assert indexed == set()
+        pinecone_index.query.assert_not_called()
+
+    def test_get_indexed_spec_numbers_handles_pinecone_query_error(
+        self, pinecone_store, pinecone_index
+    ):
+        pinecone_index.describe_index_stats.return_value = {"dimension": 2}
+        pinecone_index.query.side_effect = RuntimeError("pinecone unavailable")
+
+        indexed = pinecone_store.get_indexed_spec_numbers(["38.300"])
+
+        assert indexed == set()
+
+    def test_get_indexed_spec_numbers_cache_prevents_repeated_queries(
+        self, pinecone_store, pinecone_index
+    ):
+        pinecone_index.describe_index_stats.return_value = {"dimension": 2}
+        pinecone_index.query.return_value = {"matches": [{"id": "38300-g30.docx:0"}]}
+
+        first = pinecone_store.get_indexed_spec_numbers(["38.300"])
+        second = pinecone_store.get_indexed_spec_numbers(["38.300"])
+
+        assert first == {"38.300"}
+        assert second == {"38.300"}
+        pinecone_index.describe_index_stats.assert_called_once_with()
+        pinecone_index.query.assert_called_once()
+
+    def test_add_chunks_invalidates_indexed_spec_cache(
+        self, pinecone_store, pinecone_index, pinecone_chunks
+    ):
+        pinecone_store._indexed_spec_cache.add("38.300")
+        pinecone_store._indexed_spec_cache_candidates.add("38.300")
+
+        pinecone_store.add_chunks(pinecone_chunks[:1])
+
+        assert pinecone_store._indexed_spec_cache == set()
+        assert pinecone_store._indexed_spec_cache_candidates == set()
+
+    def test_clear_invalidates_indexed_spec_cache(self, pinecone_store, pinecone_index):
+        pinecone_store._indexed_spec_cache.add("38.300")
+        pinecone_store._indexed_spec_cache_candidates.add("38.300")
+
+        pinecone_store.clear()
+
+        assert pinecone_store._indexed_spec_cache == set()
+        assert pinecone_store._indexed_spec_cache_candidates == set()
 
 
 class TestPineconeConfiguration:

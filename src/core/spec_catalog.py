@@ -22,16 +22,17 @@ full config (text cleaner, filter dimensions, factory) import from there:
 Nothing in this file changes when a new corpus is added; a new corpus simply
 creates its own CorpusConfig without touching the 3GPP data here.
 """
+
 import re
 from typing import List, Optional, TypedDict
 
 
 class SpecEntry(TypedDict):
-    spec_number: str    # e.g. "38.300"
-    series: str         # e.g. "38_series"  (matches 3GPP FTP path)
+    spec_number: str  # e.g. "38.300"
+    series: str  # e.g. "38_series"  (matches 3GPP FTP path)
     title: str
-    domain: str         # "RAN" | "CORE"
-    generation: str     # "5G" | "LTE"
+    domain: str  # "RAN" | "CORE"
+    generation: str  # "5G" | "LTE"
     description: str
 
 
@@ -351,6 +352,7 @@ CATALOG: List[SpecEntry] = [
 # Lookup helpers
 # ---------------------------------------------------------------------------
 
+
 def get_spec(spec_number: str) -> Optional[SpecEntry]:
     """Return the catalog entry for a spec number, or None if not found."""
     for entry in CATALOG:
@@ -380,8 +382,8 @@ def infer_spec_from_filename(filename: str) -> Optional[SpecEntry]:
     """
     fname = filename.lower()
     for entry in CATALOG:
-        spec_num = entry["spec_number"]          # "38.300"
-        spec_nodot = spec_num.replace(".", "")   # "38300"
+        spec_num = entry["spec_number"]  # "38.300"
+        spec_nodot = spec_num.replace(".", "")  # "38300"
         if spec_nodot in fname or spec_num in fname:
             return entry
     return None
@@ -389,10 +391,7 @@ def infer_spec_from_filename(filename: str) -> Optional[SpecEntry]:
 
 def get_ftp_url(entry: SpecEntry) -> str:
     """Return the 3GPP FTP archive directory URL for a spec."""
-    return (
-        f"https://www.3gpp.org/ftp/Specs/archive/"
-        f"{entry['series']}/{entry['spec_number']}/"
-    )
+    return f"https://www.3gpp.org/ftp/Specs/archive/" f"{entry['series']}/{entry['spec_number']}/"
 
 
 # 3GPP archive filenames encode the spec version as -<XYZ> where X, Y, Z

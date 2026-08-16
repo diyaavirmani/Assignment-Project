@@ -6,6 +6,33 @@ import pytest
 
 
 class TestProviderFactories:
+    def test_default_providers_use_production_path(self, monkeypatch):
+        from src.core import providers
+
+        fake_embeddings = MagicMock()
+        fake_store = MagicMock()
+        fake_llm = MagicMock()
+        monkeypatch.setattr(providers, "OpenAIEmbeddingGenerator", fake_embeddings)
+        monkeypatch.setattr(providers, "PineconeVectorStore", fake_store)
+        monkeypatch.setattr(providers, "OpenAILLM", fake_llm)
+        monkeypatch.setattr(providers.settings, "embedding_provider", "openai")
+        monkeypatch.setattr(providers.settings, "vector_store_provider", "pinecone")
+        monkeypatch.setattr(providers.settings, "llm_provider", "openai")
+        monkeypatch.setattr(providers.settings, "openai_embedding_model", "embed-model")
+        monkeypatch.setattr(providers.settings, "openai_model", "gpt-test")
+        monkeypatch.setattr(providers.settings, "openai_api_key", "test-openai")
+        monkeypatch.setattr(providers.settings, "pinecone_index_name", "3gpp-rag")
+        monkeypatch.setattr(providers.settings, "pinecone_namespace", "3gpp-specs")
+        monkeypatch.setattr(providers.settings, "pinecone_api_key", "test-pinecone")
+
+        providers.create_embedding_generator()
+        providers.create_vector_store()
+        providers.create_llm()
+
+        fake_embeddings.assert_called_once()
+        fake_store.assert_called_once()
+        fake_llm.assert_called_once()
+
     def test_embedding_provider_openai(self, monkeypatch):
         from src.core import providers
 

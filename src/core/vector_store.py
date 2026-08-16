@@ -13,9 +13,10 @@ on disk under ``data/vectordb/`` (configurable via Settings.vector_db_path).
 Compatibility note: requires chromadb>=0.5.0. The on-disk schema in this
 project was created with a newer version; older 0.4.x clients are incompatible.
 """
+
 import os
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Iterable, List, Dict, Optional, Set
 import logging
 import chromadb
 from chromadb.config import Settings
@@ -25,39 +26,34 @@ logger = logging.getLogger(__name__)
 
 class VectorStore:
     """Manage vector database operations with ChromaDB"""
-    
+
     def __init__(
-        self,
-        persist_directory: str = "data/vectordb",
-        collection_name: str = "3gpp_specs"
+        self, persist_directory: str = "data/vectordb", collection_name: str = "3gpp_specs"
     ):
         """
         Initialize vector store
-        
+
         Args:
             persist_directory: Directory to store the database
             collection_name: Name of the collection
         """
         self.persist_directory = Path(persist_directory)
         self.collection_name = collection_name
-        
+
         # Create directory if it doesn't exist
         self.persist_directory.mkdir(parents=True, exist_ok=True)
-        
+
         # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(
-            path=str(self.persist_directory)
-        )
-        
+        self.client = chromadb.PersistentClient(path=str(self.persist_directory))
+
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
-            name=self.collection_name,
-            metadata={"description": "3GPP technical specifications"}
+            name=self.collection_name, metadata={"description": "3GPP technical specifications"}
         )
-        
+
         logger.info(f"Initialized VectorStore: {collection_name}")
         logger.info(f"Persist directory: {self.persist_directory}")
-    
+
     def add_chunks(self, chunks: List[Dict]) -> None:
         """
         Add chunks with embeddings to the vector store.
@@ -83,19 +79,19 @@ class VectorStore:
         for i, chunk in enumerate(chunks):
             chunk_id = f"id_{id_offset + i}"
             ids.append(chunk_id)
-            embeddings.append(chunk['embedding'])
-            documents.append(chunk['text'])
+            embeddings.append(chunk["embedding"])
+            documents.append(chunk["text"])
 
-            meta = chunk.get('metadata', {})
+            meta = chunk.get("metadata", {})
             metadata = {
-                "source":      meta.get('source', 'unknown'),
-                "chunk_index": meta.get('chunk_index', i),
-                "chunk_size":  meta.get('chunk_size', len(chunk['text'])),
+                "source": meta.get("source", "unknown"),
+                "chunk_index": meta.get("chunk_index", i),
+                "chunk_size": meta.get("chunk_size", len(chunk["text"])),
                 # Catalog fields — default to "unknown" so where-filters still work
-                "domain":      meta.get('domain', 'unknown'),
-                "generation":  meta.get('generation', 'unknown'),
-                "spec_number": meta.get('spec_number', 'unknown'),
-                "spec_title":  meta.get('spec_title', 'unknown'),
+                "domain": meta.get("domain", "unknown"),
+                "generation": meta.get("generation", "unknown"),
+                "spec_number": meta.get("spec_number", "unknown"),
+                "spec_title": meta.get("spec_title", "unknown"),
             }
             metadatas.append(metadata)
 
@@ -112,7 +108,7 @@ class VectorStore:
             logger.info(f"Added batch {i//batch_size + 1}/{(len(ids)-1)//batch_size + 1}")
 
         logger.info(f"Successfully added {len(chunks)} chunks")
-    
+
     def query(
         self,
         query_embedding: List[float],
@@ -143,32 +139,51 @@ class VectorStore:
             kwargs["where"] = where_filter
 
         return self.collection.query(**kwargs)
-    
+
     def get_stats(self) -> Dict:
         """Get statistics about the vector store"""
         count = self.collection.count()
-        
+
         return {
             "collection_name": self.collection_name,
             "total_chunks": count,
         }
-    
+
+    def get_indexed_spec_numbers(self, candidate_spec_numbers: Iterable[str]) -> Set[str]:
+        """
+        Return candidate 3GPP spec numbers present in the Chroma collection.
+
+        The catalog endpoint only needs presence/absence, so each catalog
+        candidate is checked with a metadata filter and ``limit=1`` rather than
+        scanning all stored chunks.
+        """
+        indexed: Set[str] = set()
+        for spec_number in candidate_spec_numbers:
+            if not spec_number:
+                continue
+            result = self.collection.get(
+                limit=1,
+                where={"spec_number": spec_number},
+                include=[],
+            )
+            if result and result.get("ids"):
+                indexed.add(spec_number)
+        return indexed
+
     def clear(self) -> None:
         """Clear all data from the collection"""
         logger.warning("Clearing all data from vector store")
         self.client.delete_collection(self.collection_name)
-        self.collection = self.client.create_collection(
-            name=self.collection_name
-        )
+        self.collection = self.client.create_collection(name=self.collection_name)
 
 
 if __name__ == "__main__":
     # Test the vector store
     logging.basicConfig(level=logging.INFO)
-    
+
     # Initialize
     store = VectorStore()
-    
+
     # Get stats
     stats = store.get_stats()
     print("\nVector Store Stats:")

@@ -42,9 +42,7 @@ class OpenAIEmbeddingGenerator:
             ImportError: If the OpenAI SDK is not installed and no client is injected.
             ValueError: If no API key is configured and no client is injected.
         """
-        self.model_name = (
-            model_name if model_name is not None else settings.openai_embedding_model
-        )
+        self.model_name = model_name if model_name is not None else settings.openai_embedding_model
         self.batch_size = batch_size
 
         if self.batch_size <= 0:
@@ -58,9 +56,7 @@ class OpenAIEmbeddingGenerator:
 
         resolved_api_key = api_key if api_key is not None else settings.openai_api_key
         if not resolved_api_key:
-            raise ValueError(
-                "OPENAI_API_KEY is required to use OpenAIEmbeddingGenerator"
-            )
+            raise ValueError("OPENAI_API_KEY is required to use OpenAIEmbeddingGenerator")
         if OpenAI is None:
             raise ImportError("openai is required. Install with: pip install openai")
 
