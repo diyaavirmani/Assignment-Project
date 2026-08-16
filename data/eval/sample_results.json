@@ -1,0 +1,281 @@
+{
+  "meta": {
+    "fixture": "sample (10 chunks, 6 queries)",
+    "label": "Sample fixture baseline \u2014 demonstrates harness runs start-to-finish; NOT representative of full-corpus quality. Full-index numbers remain [RUN REQUIRED].",
+    "top_k": 5,
+    "num_queries": 6,
+    "num_chunks": 10
+  },
+  "retrieval": {
+    "avg_hit_rate_at_k": 1.0,
+    "avg_recall_at_k": 1.0,
+    "avg_mrr": 1.0,
+    "avg_ndcg_at_k": 0.9843,
+    "avg_ndcg_at_k_graded": 0.9822,
+    "avg_context_precision": 0.3,
+    "avg_context_recall": 0.9583
+  },
+  "latency": {
+    "retrieve": {
+      "p50": 4.5e-05,
+      "p95": 6.5e-05,
+      "mean": 4.7e-05
+    }
+  },
+  "per_case": [
+    {
+      "id": "fix-001",
+      "query": "What is gNB and how does it connect to the 5G core?",
+      "relevant_sources": [
+        "38300",
+        "38401"
+      ],
+      "top_retrieved": [
+        {
+          "source": "38300-g10.docx",
+          "similarity": 0.362716
+        },
+        {
+          "source": "38410-h10.docx",
+          "similarity": 0.319827
+        },
+        {
+          "source": "38401-h10.docx",
+          "similarity": 0.290367
+        },
+        {
+          "source": "38300-g10.docx",
+          "similarity": 0.28404
+        },
+        {
+          "source": "38473-h10.docx",
+          "similarity": 0.227043
+        }
+      ],
+      "metrics": {
+        "hit_rate_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_k": 0.906,
+        "context_precision": 0.6,
+        "context_recall_keywords": 1.0,
+        "k": 5,
+        "num_docs": 5,
+        "graded": false
+      },
+      "ndcg_at_k_graded": 0.8935,
+      "retrieve_latency_s": 6.5e-05
+    },
+    {
+      "id": "fix-002",
+      "query": "How does the F1 interface connect gNB-CU and gNB-DU?",
+      "relevant_sources": [
+        "38401",
+        "38473"
+      ],
+      "top_retrieved": [
+        {
+          "source": "38401-h10.docx",
+          "similarity": 0.678584
+        },
+        {
+          "source": "38473-h10.docx",
+          "similarity": 0.501137
+        },
+        {
+          "source": "38300-g10.docx",
+          "similarity": 0.392013
+        },
+        {
+          "source": "38300-g10.docx",
+          "similarity": 0.274887
+        },
+        {
+          "source": "38410-h10.docx",
+          "similarity": 0.256787
+        }
+      ],
+      "metrics": {
+        "hit_rate_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_k": 1.0,
+        "context_precision": 0.4,
+        "context_recall_keywords": 1.0,
+        "k": 5,
+        "num_docs": 5,
+        "graded": false
+      },
+      "ndcg_at_k_graded": 1.0,
+      "retrieve_latency_s": 5.2e-05
+    },
+    {
+      "id": "fix-003",
+      "query": "What functions does the MAC layer perform in NR?",
+      "relevant_sources": [
+        "38321"
+      ],
+      "top_retrieved": [
+        {
+          "source": "38321-h10.docx",
+          "similarity": 0.454012
+        },
+        {
+          "source": "38300-g10.docx",
+          "similarity": 0.190223
+        },
+        {
+          "source": "38300-g10.docx",
+          "similarity": 0.156938
+        },
+        {
+          "source": "38473-h10.docx",
+          "similarity": 0.140183
+        },
+        {
+          "source": "38401-h10.docx",
+          "similarity": 0.12869
+        }
+      ],
+      "metrics": {
+        "hit_rate_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_k": 1.0,
+        "context_precision": 0.2,
+        "context_recall_keywords": 1.0,
+        "k": 5,
+        "num_docs": 5,
+        "graded": false
+      },
+      "ndcg_at_k_graded": 1.0,
+      "retrieve_latency_s": 4.5e-05
+    },
+    {
+      "id": "fix-004",
+      "query": "What does PDCP do and what compression does it use?",
+      "relevant_sources": [
+        "38323"
+      ],
+      "top_retrieved": [
+        {
+          "source": "38323-h10.docx",
+          "similarity": 0.380706
+        },
+        {
+          "source": "38331-h10.docx",
+          "similarity": 0.064625
+        },
+        {
+          "source": "38473-h10.docx",
+          "similarity": 0.058145
+        },
+        {
+          "source": "38321-h10.docx",
+          "similarity": 0.052595
+        },
+        {
+          "source": "38211-h10.docx",
+          "similarity": 0.043416
+        }
+      ],
+      "metrics": {
+        "hit_rate_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_k": 1.0,
+        "context_precision": 0.2,
+        "context_recall_keywords": 1.0,
+        "k": 5,
+        "num_docs": 5,
+        "graded": false
+      },
+      "ndcg_at_k_graded": 1.0,
+      "retrieve_latency_s": 3.9e-05
+    },
+    {
+      "id": "fix-005",
+      "query": "What are the three modes of the RLC protocol?",
+      "relevant_sources": [
+        "38322"
+      ],
+      "top_retrieved": [
+        {
+          "source": "38322-h10.docx",
+          "similarity": 0.434858
+        },
+        {
+          "source": "38300-g10.docx",
+          "similarity": 0.291996
+        },
+        {
+          "source": "38410-h10.docx",
+          "similarity": 0.23823
+        },
+        {
+          "source": "38300-g10.docx",
+          "similarity": 0.223457
+        },
+        {
+          "source": "38401-h10.docx",
+          "similarity": 0.217936
+        }
+      ],
+      "metrics": {
+        "hit_rate_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_k": 1.0,
+        "context_precision": 0.2,
+        "context_recall_keywords": 1.0,
+        "k": 5,
+        "num_docs": 5,
+        "graded": false
+      },
+      "ndcg_at_k_graded": 1.0,
+      "retrieve_latency_s": 4.2e-05
+    },
+    {
+      "id": "fix-006",
+      "query": "What NR physical channels carry data and broadcast information?",
+      "relevant_sources": [
+        "38211"
+      ],
+      "top_retrieved": [
+        {
+          "source": "38211-h10.docx",
+          "similarity": 0.327222
+        },
+        {
+          "source": "38323-h10.docx",
+          "similarity": 0.169957
+        },
+        {
+          "source": "38331-h10.docx",
+          "similarity": 0.159049
+        },
+        {
+          "source": "38321-h10.docx",
+          "similarity": 0.144437
+        },
+        {
+          "source": "38322-h10.docx",
+          "similarity": 0.069654
+        }
+      ],
+      "metrics": {
+        "hit_rate_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_k": 1.0,
+        "context_precision": 0.2,
+        "context_recall_keywords": 0.75,
+        "k": 5,
+        "num_docs": 5,
+        "graded": false
+      },
+      "ndcg_at_k_graded": 1.0,
+      "retrieve_latency_s": 3.9e-05
+    }
+  ]
+}

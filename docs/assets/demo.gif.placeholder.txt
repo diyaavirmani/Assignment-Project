@@ -1,0 +1,11 @@
+PLACEHOLDER — demo.gif not yet recorded.
+
+This file exists to mark the intended path. The actual GIF recording requires
+the live Streamlit app and is Eric's real-world action.
+
+See DEMO_CAPTURE.md in this directory for the exact recording script and steps.
+
+Once recorded, save the GIF as:
+  docs/assets/demo.gif
+
+Then delete this placeholder file.

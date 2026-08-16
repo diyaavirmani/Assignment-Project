@@ -1,0 +1,121 @@
+# ---------------------------------------------------------------------------
+# 3GPP RAG Assistant — Docker Compose
+# ---------------------------------------------------------------------------
+# Services:
+#   api     — FastAPI backend (port 8000)
+#   ui      — Streamlit frontend (port 8501)
+#   ollama  — Local LLM server (port 11434)
+#
+# Quick start:
+#   cp .env.example .env          # edit as needed
+#   docker compose up -d          # start all services
+#   docker compose logs -f api    # follow API logs
+#
+# First-time model pull (run once after `docker compose up`):
+#   docker compose exec ollama ollama pull llama3.2
+#
+# Build the vector index (run once after adding documents to data/raw/):
+#   docker compose run --rm api python src/core/document_processor.py
+#   docker compose run --rm api python scripts/build_index.py
+#
+# Run evaluation:
+#   docker compose run --rm api python scripts/eval_retrieval.py --full
+# ---------------------------------------------------------------------------
+
+version: "3.9"
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Ollama — local LLM server
+  # --------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: 3gpp_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      # Persist downloaded models between container restarts
+      - ollama_models:/root/.ollama
+    # GPU support (uncomment if you have an NVIDIA GPU + nvidia-container-toolkit)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # API — FastAPI backend
+  # --------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: 3gpp_api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      # Override Ollama URL to point to the sidecar container
+      OLLAMA_BASE_URL: "http://ollama:11434"
+    volumes:
+      # Mount data directory so the index persists on the host
+      - ./data:/app/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # UI — Streamlit frontend
+  # --------------------------------------------------------------------------
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: 3gpp_ui
+    restart: unless-stopped
+    ports:
+      - "${UI_PORT:-8501}:8501"
+    environment:
+      API_BASE_URL: "http://api:8000"
+    command: >
+      streamlit run src/frontend/app.py
+        --server.port=8501
+        --server.address=0.0.0.0
+        --server.headless=true
+        --browser.gatherUsageStats=false
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+
+volumes:
+  ollama_models:
+    name: 3gpp_ollama_models

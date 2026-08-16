@@ -1,0 +1,46 @@
+# Core dependencies
+fastapi==0.109.0
+starlette>=0.35.0,<0.36.0
+uvicorn[standard]>=0.27.0,<0.28.0
+pydantic>=2.5.3
+pydantic-settings>=2.1.0
+httpx>=0.24.0,<0.28.0
+
+# LLM providers
+ollama>=0.1.8              # Local (zero cost - requires Ollama: https://ollama.com)
+groq>=0.4.0                # Cloud (free tier - https://console.groq.com/keys)
+
+# Local Embeddings (zero cost - sentence-transformers)
+sentence-transformers>=2.3.1
+torch>=2.1.0
+
+# Vector Database
+chromadb>=0.5.0
+
+# Document Processing
+python-docx==1.1.0
+pypdf==4.0.1
+python-multipart>=0.0.7
+
+# Frontend
+streamlit>=1.46.0
+requests>=2.31.0
+
+# Data Processing
+pandas>=2.1.4
+numpy>=1.26.3
+Pillow>=10.3.0
+
+# Utilities
+python-dotenv==1.0.0
+tenacity==8.2.3
+
+# Logging and Monitoring
+loguru==0.7.2
+
+# Development
+pytest==7.4.4
+pytest-cov==4.1.0
+black==24.1.1
+flake8==7.0.0
+mypy==1.8.0

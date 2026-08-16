@@ -1,0 +1,28 @@
+{
+  "baseline": {
+    "retrieval": {
+      "avg_hit_rate_at_k": 0.96,
+      "avg_recall_at_k": 0.737,
+      "avg_mrr": 0.72,
+      "avg_ndcg_at_k": 0.755,
+      "avg_context_precision": 0.456,
+      "avg_context_recall": 0.752
+    },
+    "latency": {
+      "retrieve": {
+        "p50": 0.0692,
+        "p95": 0.2127
+      }
+    }
+  },
+  "tracked_metrics": [
+    "retrieval.avg_hit_rate_at_k",
+    "retrieval.avg_recall_at_k",
+    "retrieval.avg_mrr",
+    "retrieval.avg_ndcg_at_k",
+    "retrieval.avg_context_precision",
+    "retrieval.avg_context_recall",
+    "latency.retrieve.p50",
+    "latency.retrieve.p95"
+  ]
+}
